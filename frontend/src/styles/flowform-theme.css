@@ -1,0 +1,378 @@
+/* ============================================================
+   FlowForm visual identity — ports FlowFormDemo/wwwroot/css/theme.css's design tokens onto
+   Bootstrap 5's own class hooks (so `<button className="btn btn-primary">` etc. keep working,
+   but end up looking like the original app instead of stock Bootstrap). Load this AFTER
+   bootstrap.min.css so same-specificity selectors here win by source order.
+   ============================================================ */
+:root {
+  --rail: #0E1720; --rail-2: #16222D; --rail-3: #1E2E3B;
+  --ink: #0E1720; --ink-70: #41525F; --muted: #6C7D89; --faint: #93A2AC;
+  --paper: #E9EDEF; --card: #FFFFFF; --line: #D2DAE0; --line-soft: #E3E9ED;
+  --brand: #0A5A73; --brand-2: #0E7E9E; --brand-wash: #E4F0F4;
+  --green: #186B44; --green-wash: #E2F0E9;
+  --amber: #B4750A; --amber-wash: #FBF0DC;
+  --red: #9E2B21; --red-wash: #F8E5E3;
+  --violet: #4A4A87; --violet-wash: #EBEBF6;
+  --r: 3px; --r-lg: 5px;
+  --sh: 0 1px 2px rgba(14,23,32,.06), 0 1px 8px rgba(14,23,32,.04);
+  --sh-lg: 0 12px 40px rgba(14,23,32,.20);
+  --f-disp: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  --f-body: 'Inter', system-ui, sans-serif;
+  --f-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  /* Re-point Bootstrap's own variables at the same tokens, so anything still relying on Bootstrap
+     defaults (focus rings, link color) drifts toward the same palette too. */
+  --bs-primary: var(--brand-2);
+  --bs-body-font-family: var(--f-body);
+  --bs-body-color: var(--ink);
+  --bs-body-bg: var(--paper);
+  --bs-border-color: var(--line);
+  --bs-link-color: var(--brand);
+  --bs-link-hover-color: var(--brand-2);
+}
+
+body {
+  font-family: var(--f-body);
+  font-size: 13.5px;
+  color: var(--ink);
+  background: var(--paper);
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--brand); }
+a:hover { color: var(--brand-2); }
+
+h1, h2, h3, h4, h5, h6, .h1, .h2, .h3, .h4, .h5, .h6 {
+  font-family: var(--f-disp);
+  font-weight: 600;
+  letter-spacing: .01em;
+  line-height: 1.15;
+}
+h1, .h3 { text-transform: uppercase; letter-spacing: .03em; }
+.text-uppercase.small, .eyebrow {
+  font-family: var(--f-disp); font-size: 11px; font-weight: 600;
+  letter-spacing: .16em; text-transform: uppercase; color: var(--muted) !important;
+}
+
+.font-monospace { font-family: var(--f-mono) !important; }
+
+/* ---- Buttons ---- */
+.btn {
+  font-family: var(--f-body);
+  font-weight: 500;
+  border-radius: var(--r);
+  font-size: 12.5px;
+}
+.btn-primary, .btn-primary:hover {
+  background: var(--brand); border-color: var(--brand);
+}
+.btn-primary:hover { background: #084A5E; border-color: #084A5E; }
+.btn-success, .btn-success:hover { background: var(--green); border-color: var(--green); }
+.btn-outline-primary { color: var(--brand); border-color: var(--brand); }
+.btn-outline-primary:hover { background: var(--brand); border-color: var(--brand); }
+.btn-outline-secondary { color: var(--ink-70); border-color: var(--line); }
+.btn-outline-secondary:hover { background: var(--paper); border-color: var(--muted); color: var(--ink); }
+.btn-outline-danger { color: var(--red); border-color: var(--red); }
+.btn-outline-danger:hover { background: var(--red); border-color: var(--red); }
+.btn-link { color: var(--brand); }
+.btn:disabled { opacity: .45; }
+
+/* ---- Cards ---- */
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--sh);
+}
+.card-header {
+  font-family: var(--f-disp);
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  font-size: 12px;
+  color: var(--ink-70);
+  background: #F7F9FA;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+/* ---- Badges / pills ---- */
+.badge {
+  font-family: var(--f-mono);
+  font-weight: 500;
+  letter-spacing: .04em;
+  border-radius: 2px;
+}
+.badge.rounded-pill { border-radius: 20px; }
+.text-bg-success { background-color: var(--green-wash) !important; color: var(--green) !important; }
+.text-bg-danger { background-color: var(--red-wash) !important; color: var(--red) !important; }
+.text-bg-secondary { background-color: #EEF2F4 !important; color: #546675 !important; }
+.text-bg-primary { background-color: var(--brand-wash) !important; color: var(--brand) !important; }
+/* Solid red (not the soft "wash" used for status pills above) — matches the old app's urgent
+   unread-count bell badge, which used the same currentColor::before-dot pill convention. */
+.bg-danger { background-color: var(--red) !important; color: #fff !important; }
+
+/* ---- Tables ---- */
+.table thead th {
+  font-family: var(--f-disp);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: #F7F9FA;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.table td { font-size: 12.5px; vertical-align: middle; border-color: var(--line-soft); }
+
+/* ---- Forms ---- */
+.form-label {
+  font-family: var(--f-disp);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .11em;
+  text-transform: uppercase;
+  color: var(--ink-70);
+}
+.form-control, .form-select {
+  border-color: var(--line);
+  border-radius: var(--r);
+  font-size: 12.5px;
+}
+.form-control:focus, .form-select:focus {
+  border-color: var(--brand-2);
+  box-shadow: 0 0 0 3px rgba(14,126,158,.12);
+}
+.form-check-input:checked { background-color: var(--brand); border-color: var(--brand); }
+.form-text { color: var(--muted); font-size: 11px; }
+
+/* ---- Alerts / banners ---- */
+.alert { border-radius: var(--r); font-size: 12.5px; }
+.alert-info, .alert-primary { background: var(--brand-wash); border-color: #B9D8E1; color: #08485C; }
+.alert-warning { background: var(--amber-wash); border-color: #E8D3A6; color: #7A5106; }
+.alert-success { background: var(--green-wash); border-color: #BEDDCC; color: #0F4E31; }
+.alert-danger { background: var(--red-wash); border-color: #EBC2BE; color: #7A2018; }
+.alert-secondary { background: #F3F5F6; border-color: var(--line); color: var(--ink-70); }
+
+/* ============================================================
+   App shell — dark sidebar rail + top bar, matching _Layout.cshtml's `.app`/`.rail`/`.topbar`.
+   ============================================================ */
+.ff-app { display: grid; grid-template-columns: 216px 1fr; min-height: 100vh; }
+
+.ff-rail {
+  background: var(--rail); color: #C4D0D8;
+  display: flex; flex-direction: column;
+  background-image: linear-gradient(rgba(255,255,255,.022) 1px, transparent 1px);
+  background-size: 100% 4px;
+}
+.ff-rail-top { padding: 16px 16px 14px; border-bottom: 1px solid rgba(255,255,255,.09); }
+.ff-rail-mark { display: flex; align-items: center; gap: 9px; }
+.ff-rail-mark b {
+  font-family: var(--f-disp); font-size: 19px; font-weight: 700;
+  letter-spacing: .08em; color: #fff; text-transform: uppercase;
+}
+.ff-rail-mark .sub { font-family: var(--f-mono); font-size: 9.5px; color: #7E93A0; letter-spacing: .04em; margin-top: 1px; }
+.ff-rail-nav { flex: 1; overflow-y: auto; padding: 10px 0 24px; }
+.ff-nav-grp {
+  font-family: var(--f-disp); font-size: 10px; font-weight: 600;
+  letter-spacing: .18em; text-transform: uppercase; color: #5E7382; padding: 15px 16px 6px;
+}
+.ff-nav-i {
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  padding: 6.5px 16px; font-size: 12.5px; color: #B4C3CD;
+  border-left: 2px solid transparent; text-decoration: none;
+}
+.ff-nav-i:hover { background: rgba(255,255,255,.05); color: #fff; }
+.ff-nav-i.on {
+  background: linear-gradient(90deg, rgba(14,126,158,.30), rgba(14,126,158,.04));
+  color: #fff; border-left-color: var(--brand-2); font-weight: 500;
+}
+.ff-rail-foot { padding: 11px 16px; border-top: 1px solid rgba(255,255,255,.09); font-family: var(--f-mono); font-size: 10px; color: #5E7382; }
+
+.ff-main { display: flex; flex-direction: column; background: var(--paper); min-height: 100vh; }
+.ff-topbar {
+  height: 52px; flex: none; background: var(--card); border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; gap: 14px; padding: 0 20px;
+}
+.ff-who { display: flex; align-items: center; gap: 8px; padding-left: 14px; border-left: 1px solid var(--line-soft); }
+.ff-av {
+  width: 28px; height: 28px; border-radius: 50%; background: var(--brand); color: #fff;
+  display: grid; place-items: center; font-family: var(--f-disp); font-size: 12px; font-weight: 600; letter-spacing: .04em;
+}
+.ff-who .nm { font-size: 12px; font-weight: 500; line-height: 1.25; }
+.ff-who .rl { font-family: var(--f-mono); font-size: 10px; color: var(--muted); }
+
+.ff-page { padding: 22px 24px 60px; max-width: 1420px; }
+
+@media (max-width: 900px) {
+  .ff-app { grid-template-columns: 56px 1fr; }
+  .ff-rail-mark b, .ff-rail-mark .sub, .ff-nav-i span, .ff-rail-foot, .ff-nav-grp { display: none; }
+  .ff-rail-top { padding: 14px 0; display: flex; justify-content: center; }
+  .ff-nav-i { justify-content: center; padding: 10px 0; }
+}
+
+/* ============================================================
+   Designers (WorkflowDesign / FormDesign) — palette | canvas | settings, matching
+   FlowFormDemo/wwwroot/css/theme.css's `.designer`/`.dz-side`/`.dz-canvas`/`.palette-i`/`.node`.
+   ============================================================ */
+.designer {
+  display: grid; grid-template-columns: 206px 1fr 320px; gap: 0;
+  border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden;
+  background: #fff; min-height: 560px;
+}
+.dz-side { border-right: 1px solid var(--line-soft); background: #FAFCFC; padding: 12px; overflow-y: auto; }
+.dz-side.r { border-right: none; border-left: 1px solid var(--line-soft); }
+.dz-canvas {
+  padding: 18px; overflow: auto;
+  background:
+    linear-gradient(90deg, rgba(14,23,32,.045) 1px, transparent 1px) 0 0/20px 20px,
+    linear-gradient(rgba(14,23,32,.045) 1px, transparent 1px) 0 0/20px 20px, #fff;
+}
+.dz-canvas.drop-target { background-color: var(--brand-wash); }
+.palette-i {
+  display: flex; align-items: center; gap: 8px; padding: 7px 9px;
+  border: 1px solid var(--line); border-radius: var(--r); background: #fff;
+  font-size: 12px; margin-bottom: 6px; color: var(--ink-70); cursor: grab;
+}
+.palette-i .ic { flex: none; opacity: .8; }
+.node {
+  background: #fff; border: 1.5px solid var(--line); border-radius: var(--r);
+  padding: 9px 11px; margin-bottom: 9px; cursor: pointer; position: relative;
+  text-decoration: none; display: block; color: inherit;
+}
+.node:hover { border-color: var(--brand-2); }
+.node.on { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-wash); }
+.node[draggable="true"] { cursor: grab; }
+.node .nn {
+  font-family: var(--f-mono); font-size: 10px; color: #fff; background: var(--rail-3);
+  width: 19px; height: 19px; display: grid; place-items: center; border-radius: 2px; flex: none;
+}
+.node .nt { font-family: var(--f-disp); font-size: 13px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; }
+.node .nm { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+.fb-field {
+  border: 1.5px dashed var(--line); border-radius: var(--r); padding: 9px 11px; margin-bottom: 8px;
+  background: #fff; cursor: pointer; text-decoration: none; display: block; color: inherit;
+}
+.fb-field:hover { border-color: var(--brand-2); border-style: solid; }
+.fb-field.on { border-color: var(--brand); border-style: solid; box-shadow: 0 0 0 3px var(--brand-wash); }
+.fb-section {
+  border: 1.5px dashed var(--violet); border-radius: var(--r); margin-bottom: 9px; background: var(--violet-wash);
+}
+.fb-section-h { display: block; padding: 8px 11px; }
+.fb-section-h.on { background: #fff; }
+.fb-section-children { padding: 0 11px 10px 22px; min-height: 24px; }
+.fb-section-children .fb-field { background: #fff; }
+.dz-add {
+  display: block; width: 100%; text-align: center; color: var(--muted);
+  border: 1.5px dashed var(--line); border-radius: var(--r); background: none;
+  padding: 9px 11px; cursor: pointer; font-size: 12.5px;
+}
+.dz-add:hover { border-color: var(--brand-2); color: var(--brand); }
+.canvas-label { font-family: var(--f-mono); font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 10px; }
+.hint { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+/* ============================================================
+   Request create/process — gate-rail stepper, create-grid layout, step tabs. Matches
+   FlowFormDemo/wwwroot/css/theme.css's `.gaterail`/`.create-grid`/`.tabs`.
+   ============================================================ */
+.gaterail {
+  background: var(--rail); border-radius: var(--r-lg); padding: 16px 4px 10px; overflow-x: auto; margin-bottom: 14px;
+}
+.gaterail svg { display: block; margin: 0 auto; width: 100%; max-width: 900px; }
+.gr-line { stroke: #3A4E5C; stroke-width: 2; }
+.gr-line.live { stroke: var(--brand-2); }
+.gr-line.done { stroke: #2E9E6B; }
+.gv .body { fill: var(--rail-2); stroke: #3A4E5C; stroke-width: 1.5; }
+.gv.done .body { fill: #123D2A; stroke: #2E9E6B; }
+.gv.live .body { fill: #0A3A4A; stroke: #22B5DE; }
+.gv .lbl { font-family: var(--f-disp); font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; fill: #7E93A0; }
+.gv.done .lbl { fill: #6FD3A5; }
+.gv.live .lbl { fill: #5FD6F5; }
+.gv .num { font-family: var(--f-mono); font-size: 10px; fill: #93A9B6; }
+.gv.live .num, .gv.done .num { fill: #fff; }
+.gv .who { font-family: var(--f-mono); font-size: 8.5px; fill: #5E7382; }
+.gr-legend { display: flex; gap: 16px; justify-content: center; padding-top: 8px; flex-wrap: wrap; }
+.gr-legend span { font-family: var(--f-mono); font-size: 9.5px; color: #7E93A0; display: flex; align-items: center; gap: 5px; }
+.gr-legend i { width: 8px; height: 8px; border-radius: 1px; display: block; }
+
+.create-grid { display: grid; grid-template-columns: 1fr 280px; gap: 14px; align-items: start; }
+@media (max-width: 900px) { .create-grid { grid-template-columns: 1fr; } }
+
+.step-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--line); overflow-x: auto; margin-bottom: 14px; }
+.step-tab {
+  padding: 8px 14px; font-family: var(--f-disp); font-size: 12.5px; font-weight: 500; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--muted); border: none; border-bottom: 2px solid transparent;
+  background: none; white-space: nowrap; cursor: pointer;
+}
+.step-tab:hover { color: var(--ink); }
+.step-tab.on { color: var(--brand); border-bottom-color: var(--brand); font-weight: 600; }
+
+.personnel-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line-soft); }
+.personnel-row:last-child { border-bottom: none; }
+
+/* ============================================================
+   Chip/tag multiselect (TagSelect) — matches theme.css's `.tagselect`/`.ts-*`. Used for
+   Workflow "who acts" / "Escalate to" and the PeoplePicker field.
+   ============================================================ */
+.tagselect { position: relative; }
+.tagselect .ts-box {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 5px; min-height: 32px;
+  padding: 5px 7px; border: 1px solid var(--line); border-radius: var(--r); background: #fff; cursor: text;
+}
+.tagselect .ts-box:focus-within { border-color: var(--brand-2); box-shadow: 0 0 0 3px rgba(14,126,158,.12); }
+.tagselect.disabled .ts-box { background: #F3F5F6; cursor: not-allowed; opacity: .65; pointer-events: none; }
+.tagselect .ts-chip {
+  display: inline-flex; align-items: center; gap: 5px; background: var(--paper); border: 1px solid var(--line-soft);
+  border-radius: 2px; padding: 2px 6px; font-size: 12px; color: var(--ink-70); white-space: nowrap;
+}
+.tagselect .ts-chip .x { border: none; background: none; padding: 0; line-height: 1; color: var(--muted); cursor: pointer; font-size: 13px; }
+.tagselect .ts-chip .x:hover { color: var(--red); }
+.tagselect .ts-input { flex: 1; min-width: 70px; border: none; outline: none; font-size: 12.5px; padding: 2px; background: none; }
+.tagselect .ts-panel {
+  position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; right: 0; background: #fff;
+  border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--sh-lg); max-height: 210px; overflow-y: auto;
+}
+.tagselect .ts-opt { display: flex; align-items: center; gap: 7px; padding: 7px 10px; font-size: 12.5px; cursor: pointer; color: var(--ink); }
+.tagselect .ts-opt.sel { background: #EEF1F2; color: var(--muted); }
+.tagselect .ts-opt.active { background: var(--brand-2); color: #fff; }
+.tagselect .ts-opt.empty { color: var(--faint); font-style: italic; cursor: default; }
+.av-sm { width: 18px; height: 18px; font-size: 9px; flex: none; }
+
+/* ============================================================
+   Toast stack + confirm overlay — replace window.alert()/window.confirm() with in-app UI that
+   matches the rest of the theme instead of the browser's native dialog chrome.
+   ============================================================ */
+.toast-stack {
+  position: fixed; top: 16px; right: 16px; z-index: 2000;
+  display: flex; flex-direction: column; gap: 8px; max-width: 360px;
+}
+.toast-item {
+  display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px;
+  border-radius: var(--r); box-shadow: var(--sh-lg); font-size: 12.5px; color: #fff;
+  background: var(--ink); animation: toast-in .18s ease-out;
+}
+.toast-item.success { background: var(--green); }
+.toast-item.error { background: var(--red); }
+.toast-item.info { background: var(--brand); }
+.toast-item span { flex: 1; }
+.toast-close { border: none; background: none; color: inherit; opacity: .7; line-height: 1; font-size: 15px; cursor: pointer; padding: 0; }
+.toast-close:hover { opacity: 1; }
+@keyframes toast-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+
+.confirm-overlay {
+  position: fixed; inset: 0; background: rgba(14,23,32,.45); z-index: 2000;
+  display: flex; align-items: center; justify-content: center;
+}
+.confirm-box {
+  background: #fff; border-radius: var(--r-lg); box-shadow: var(--sh-lg);
+  padding: 18px 20px; width: 360px; max-width: 92vw; font-size: 13px; color: var(--ink);
+}
+
+/* ---- File dropzone — matches theme.css's `.dropzone`. ---- */
+.dropzone {
+  display: block; border: 1.5px dashed var(--line); border-radius: var(--r); padding: 22px;
+  text-align: center; color: var(--muted); font-size: 12px; cursor: pointer;
+}
+.dropzone:hover { border-color: var(--brand-2); color: var(--ink-70); }
+.dropzone.drag { border-color: var(--brand); background: var(--brand-wash); color: var(--brand); }
+.dropzone.disabled { cursor: not-allowed; opacity: .6; }

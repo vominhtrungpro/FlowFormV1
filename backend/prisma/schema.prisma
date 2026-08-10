@@ -1,0 +1,380 @@
+// Prisma schema for FlowForm — SQLite for now, SQL Server later (see migration plan).
+// SQLite has no native enum type, so every "enum" field below is a String, validated at the
+// NestJS layer against the union types in src/common/enums.ts (mirrors the old app's Enums.cs).
+// When SQL Server lands, these become real Prisma `enum` blocks.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             Int      @id @default(autoincrement())
+  metaIsDeleted  Boolean  @default(false)
+  metaCreatedAt  DateTime @default(now())
+  metaUpdatedAt  DateTime?
+  metaCreatedBy  Int?
+  metaUpdatedBy  Int?
+
+  email        String @unique
+  passwordHash String
+  role         String // "admin" | "user"
+  tag          String // free-text job title, e.g. "developer", "project_manager"
+
+  gatekeeperOf     StepGatekeeper[]
+  approvals        StepApproval[]
+  notifications    Notification[]
+
+  @@map("app_user")
+}
+
+model RequestType {
+  id             Int      @id @default(autoincrement())
+  metaIsDeleted  Boolean  @default(false)
+  metaCreatedAt  DateTime @default(now())
+  metaUpdatedAt  DateTime?
+  metaCreatedBy  Int?
+  metaUpdatedBy  Int?
+
+  name                     String
+  code                     String
+  currentWorkflowDefinitionId Int?
+
+  workflowDefinitions WorkflowDefinition[] @relation("RequestTypeWorkflows")
+  requests            Request[]
+
+  @@map("request_type")
+}
+
+model WorkflowDefinition {
+  id             Int      @id @default(autoincrement())
+  metaIsDeleted  Boolean  @default(false)
+  metaCreatedAt  DateTime @default(now())
+  metaUpdatedAt  DateTime?
+  metaCreatedBy  Int?
+  metaUpdatedBy  Int?
+
+  requestTypeId Int
+  requestType   RequestType @relation("RequestTypeWorkflows", fields: [requestTypeId], references: [id])
+  versionNumber Int    @default(1)
+  status        String // DefinitionStatus: Draft | Published | Retired
+  publishedAt   DateTime?
+
+  steps    Step[]
+  requests Request[]
+
+  @@map("workflow_definition")
+}
+
+model Step {
+  id             Int      @id @default(autoincrement())
+  metaIsDeleted  Boolean  @default(false)
+  metaCreatedAt  DateTime @default(now())
+  metaUpdatedAt  DateTime?
+  metaCreatedBy  Int?
+  metaUpdatedBy  Int?
+
+  workflowDefinitionId Int
+  workflowDefinition   WorkflowDefinition @relation(fields: [workflowDefinitionId], references: [id])
+  orderIndex           Int
+  name                 String
+  type                 String // StepType
+  actorType            String // ActorType
+  actorRef             String @default("")
+  slaValue             Int?
+  slaUnit              String? // SlaUnit
+  escalateTo           String? // comma-separated emails
+  formDefinitionId     Int?
+  formDefinition       FormDefinition? @relation(fields: [formDefinitionId], references: [id])
+  resolutionRule       String? // ResolutionRule — unused today, carried for parity
+  cannotPassUntilJson  String? // unused today, carried for parity
+  sequentialApproval   Boolean @default(false)
+
+  transitionsFrom  Transition[]        @relation("FromStep")
+  transitionsTo    Transition[]        @relation("ToStep")
+  gatekeepers      StepGatekeeper[]
+  conditionRulesOf StepConditionRule[] @relation("RuleOwnerStep")
+  conditionRulesTo StepConditionRule[] @relation("RuleTargetStep")
+  requestsCurrent  Request[]
+  requestHistoriesAsStep     RequestHistory[] @relation("HistoryStep")
+  requestHistoriesAsFromStep RequestHistory[] @relation("HistoryFromStep")
+  requestHistoriesAsToStep   RequestHistory[] @relation("HistoryToStep")
+  approvals        StepApproval[]
+
+  @@map("step")
+}
+
+model Transition {
+  id             Int      @id @default(autoincrement())
+  metaIsDeleted  Boolean  @default(false)
+  metaCreatedAt  DateTime @default(now())
+  metaUpdatedAt  DateTime?
+  metaCreatedBy  Int?
+  metaUpdatedBy  Int?
+
+  fromStepId Int
+  fromStep   Step   @relation("FromStep", fields: [fromStepId], references: [id])
+  action     String // TransitionAction
+  toStepId   Int?
+  toStep     Step?  @relation("ToStep", fields: [toStepId], references: [id])
+
+  @@map("transition")
+}
+
+model StepGatekeeper {
+  id             Int      @id @default(autoincrement())
+  metaIsDeleted  Boolean  @default(false)
+  metaCreatedAt  DateTime @default(now())
+  metaUpdatedAt  DateTime?
+  metaCreatedBy  Int?
+  metaUpdatedBy  Int?
+
+  stepId   Int
+  step     Step @relation(fields: [stepId], references: [id])
+  userId   Int
+  user     User @relation(fields: [userId], references: [id])
+  function String
+
+  @@map("step_gatekeeper")
+}
+
+model StepConditionRule {
+  id             Int      @id @default(autoincrement())
+  metaIsDeleted  Boolean  @default(false)
+  metaCreatedAt  DateTime @default(now())
+  metaUpdatedAt  DateTime?
+  metaCreatedBy  Int?
+  metaUpdatedBy  Int?
+
+  stepId       Int
+  step         Step    @relation("RuleOwnerStep", fields: [stepId], references: [id])
+  orderIndex   Int
+  isElse       Boolean @default(false)
+  fieldId      Int?
+  field        Field?  @relation(fields: [fieldId], references: [id])
+  operator     String? // ConditionOperator
+  compareValue String?
+  toStepId     Int?
+  toStep       Step?   @relation("RuleTargetStep", fields: [toStepId], references: [id])
+
+  @@map("step_condition_rule")
+}
+
+model FormDefinition {
+  id             Int      @id @default(autoincrement())
+  metaIsDeleted  Boolean  @default(false)
+  metaCreatedAt  DateTime @default(now())
+  metaUpdatedAt  DateTime?
+  metaCreatedBy  Int?
+  metaUpdatedBy  Int?
+
+  name          String
+  versionNumber Int    @default(1)
+  status        String // DefinitionStatus
+
+  fields Field[]
+  steps  Step[]
+
+  @@map("form_definition")
+}
+
+model Field {
+  id             Int      @id @default(autoincrement())
+  metaIsDeleted  Boolean  @default(false)
+  metaCreatedAt  DateTime @default(now())
+  metaUpdatedAt  DateTime?
+  metaCreatedBy  Int?
+  metaUpdatedBy  Int?
+
+  formDefinitionId    Int
+  formDefinition      FormDefinition @relation(fields: [formDefinitionId], references: [id])
+  orderIndex          Int
+  parentFieldId       Int?
+  parentField         Field?  @relation("FieldChildren", fields: [parentFieldId], references: [id])
+  children            Field[] @relation("FieldChildren")
+  label               String
+  helpText            String?
+  type                String  // FieldType
+  required            Boolean @default(false)
+  width               String  @default("Full") // FieldWidth
+  visibilityCondition String? // unused today, carried for parity
+  minLength           Int?
+  maxLength           Int?
+  minValue            Float?
+  maxValue            Float?
+  minDate             DateTime?
+  maxDate             DateTime?
+  maxFileSizeMb       Int?
+  readOnlyAfterSubmit  Boolean @default(false)
+  includeInPrintSummary Boolean @default(true)
+  trackAuditLog        Boolean @default(true)
+  defaultValue         String?
+  options              String? // comma-list (Dropdown/Checklist) or JSON TableColumn[] (Table)
+  pickerActorType      String? // unused today, carried for parity
+  pickerActorRef       String? // unused today, carried for parity
+  useForNextStepActor  Boolean @default(false) // unused today, carried for parity
+
+  conditionRules     StepConditionRule[]
+  requestFieldValues RequestFieldValue[]
+
+  @@map("field")
+}
+
+model Request {
+  id             Int      @id @default(autoincrement())
+  metaIsDeleted  Boolean  @default(false)
+  metaCreatedAt  DateTime @default(now())
+  metaUpdatedAt  DateTime?
+  metaCreatedBy  Int?
+  metaUpdatedBy  Int?
+
+  code                 String
+  title                String
+  requester            String // display name, not the authoritative owner — see metaCreatedBy
+  requestTypeId        Int
+  requestType          RequestType @relation(fields: [requestTypeId], references: [id])
+  workflowDefinitionId Int // snapshot — never repointed to a newer published version
+  workflowDefinition   WorkflowDefinition @relation(fields: [workflowDefinitionId], references: [id])
+  currentStepId        Int?
+  currentStep          Step?   @relation(fields: [currentStepId], references: [id])
+  currentStepEnteredAt DateTime?
+  status               String  // RequestStatus
+  completedAt          DateTime?
+  slaEscalatedAt       DateTime? // reset to null every time currentStepId changes
+
+  fieldValues RequestFieldValue[]
+  histories   RequestHistory[]
+  approvals   StepApproval[]
+  notifications Notification[]
+
+  @@map("request")
+}
+
+model RequestFieldValue {
+  id             Int      @id @default(autoincrement())
+  metaIsDeleted  Boolean  @default(false)
+  metaCreatedAt  DateTime @default(now())
+  metaUpdatedAt  DateTime?
+  metaCreatedBy  Int?
+  metaUpdatedBy  Int?
+
+  requestId Int
+  request   Request @relation(fields: [requestId], references: [id])
+  fieldId   Int
+  field     Field   @relation(fields: [fieldId], references: [id])
+  value     String
+
+  @@map("request_field_value")
+}
+
+model RequestHistory {
+  id             Int      @id @default(autoincrement())
+  metaIsDeleted  Boolean  @default(false)
+  metaCreatedAt  DateTime @default(now())
+  metaUpdatedAt  DateTime?
+  metaCreatedBy  Int?
+  metaUpdatedBy  Int?
+
+  requestId  Int
+  request    Request @relation(fields: [requestId], references: [id])
+  stepId     Int?
+  step       Step?   @relation("HistoryStep", fields: [stepId], references: [id])
+  action     String  // TransitionAction
+  actorId    String  // actor's email (or "system")
+  fromStepId Int?
+  fromStep   Step?   @relation("HistoryFromStep", fields: [fromStepId], references: [id])
+  toStepId   Int?
+  toStep     Step?   @relation("HistoryToStep", fields: [toStepId], references: [id])
+  comment    String?
+
+  @@map("request_history")
+}
+
+model StepApproval {
+  id             Int      @id @default(autoincrement())
+  metaIsDeleted  Boolean  @default(false)
+  metaCreatedAt  DateTime @default(now())
+  metaUpdatedAt  DateTime?
+  metaCreatedBy  Int?
+  metaUpdatedBy  Int?
+
+  requestId Int
+  request   Request @relation(fields: [requestId], references: [id])
+  stepId    Int
+  step      Step    @relation(fields: [stepId], references: [id])
+  userId    Int
+  user      User    @relation(fields: [userId], references: [id])
+  comment   String?
+
+  @@map("step_approval")
+}
+
+model Notification {
+  id             Int      @id @default(autoincrement())
+  metaIsDeleted  Boolean  @default(false)
+  metaCreatedAt  DateTime @default(now())
+  metaUpdatedAt  DateTime?
+  metaCreatedBy  Int?
+  metaUpdatedBy  Int?
+
+  userId    Int
+  user      User    @relation(fields: [userId], references: [id])
+  requestId Int
+  request   Request @relation(fields: [requestId], references: [id])
+  message   String
+  isRead    Boolean @default(false)
+  readAt    DateTime?
+
+  @@map("notification")
+}
+
+model MasterPlant {
+  id             Int      @id @default(autoincrement())
+  metaIsDeleted  Boolean  @default(false)
+  metaCreatedAt  DateTime @default(now())
+  metaUpdatedAt  DateTime?
+  metaCreatedBy  Int?
+  metaUpdatedBy  Int?
+
+  name  String
+  code  String
+  areas MasterArea[]
+
+  @@map("master_plant")
+}
+
+model MasterArea {
+  id             Int      @id @default(autoincrement())
+  metaIsDeleted  Boolean  @default(false)
+  metaCreatedAt  DateTime @default(now())
+  metaUpdatedAt  DateTime?
+  metaCreatedBy  Int?
+  metaUpdatedBy  Int?
+
+  plantId Int
+  plant   MasterPlant @relation(fields: [plantId], references: [id])
+  name    String
+  code    String
+  units   MasterUnit[]
+
+  @@map("master_area")
+}
+
+model MasterUnit {
+  id             Int      @id @default(autoincrement())
+  metaIsDeleted  Boolean  @default(false)
+  metaCreatedAt  DateTime @default(now())
+  metaUpdatedAt  DateTime?
+  metaCreatedBy  Int?
+  metaUpdatedBy  Int?
+
+  areaId Int
+  area   MasterArea @relation(fields: [areaId], references: [id])
+  name   String
+
+  @@map("master_unit")
+}
