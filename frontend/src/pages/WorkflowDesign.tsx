@@ -26,7 +26,6 @@ export function WorkflowDesign() {
   async function load(selectStepId?: number) {
     const data = await getWorkflowDesign(workflowId, selectStepId ?? stepId);
     setDesign(data);
-    setMetaName(data.workflow.requestTypeName);
     if (data.selected) setSearchParams({ stepId: String(data.selected.id) }, { replace: true });
   }
 
@@ -34,6 +33,14 @@ export function WorkflowDesign() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workflowId]);
+
+  // Only re-sync the name input from the server when a *different* workflow has loaded — every
+  // other action (add/remove/reorder a step, etc.) also calls load() to refresh the canvas, and
+  // re-firing this on every one of those would stomp whatever the user just typed but hasn't saved.
+  useEffect(() => {
+    if (design) setMetaName(design.workflow.requestTypeName);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [design?.workflow.id]);
 
   async function onAddStep(type?: string) {
     setError(null);

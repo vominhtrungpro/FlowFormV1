@@ -58,7 +58,6 @@ export function FormDesign() {
   async function load(selectFieldId?: number) {
     const data = await getFormDesign(formId, selectFieldId ?? fieldId);
     setDesign(data);
-    setMetaName(data.form.name);
     if (data.selected) setSearchParams({ fieldId: String(data.selected.id) }, { replace: true });
   }
 
@@ -66,6 +65,14 @@ export function FormDesign() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formId]);
+
+  // Only re-sync the name input from the server when a *different* form has loaded — every other
+  // action (add/remove/reorder a field, etc.) also calls load() to refresh the canvas, and re-firing
+  // this on every one of those would stomp whatever the user just typed but hasn't saved yet.
+  useEffect(() => {
+    if (design) setMetaName(design.form.name);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [design?.form.id]);
 
   async function onAddField(type: string, parentFieldId?: number) {
     const { id: newId } = await addField(formId, type, parentFieldId);

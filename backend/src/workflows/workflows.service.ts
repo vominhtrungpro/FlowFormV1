@@ -268,7 +268,7 @@ export class WorkflowsService {
     if (isCondition) {
       await this.prisma.db.transition.updateMany({ where: { fromStepId: stepId }, data: { metaIsDeleted: true, metaUpdatedAt: new Date() } });
     } else {
-      await this.saveTransitions(stepId, step.workflowDefinitionId, step.orderIndex, type!, isApprovalGate, dto);
+      await this.saveTransitions(stepId, step.workflowDefinitionId, type!, isApprovalGate, dto);
     }
 
     if (isCondition) {
@@ -289,20 +289,24 @@ export class WorkflowsService {
   private async saveTransitions(
     stepId: number,
     workflowDefinitionId: number,
-    orderIndex: number,
     type: string,
     isApprovalGate: boolean,
     dto: SaveStepDto,
   ) {
-    const previousStep = await this.prisma.db.step.findFirst({ where: { workflowDefinitionId, orderIndex: orderIndex - 1 } });
-    const wantsReturn = isApprovalGate && !!dto.allowReturn && !!previousStep;
+    const siblingSteps = await this.prisma.db.step.findMany({ where: { workflowDefinitionId, NOT: { id: stepId } } });
+
+    // The Return target is whatever the designer explicitly picked in the dropdown — returning to
+    // a Condition step would be pointless (it auto-routes immediately instead of waiting for a
+    // human), so that's excluded from valid targets same as it is from the picker's own options.
+    const returnTargetStep = dto.returnToStepId ? siblingSteps.find((s) => s.id === dto.returnToStepId && s.type !== 'Condition') : undefined;
+    const wantsReturn = isApprovalGate && !!dto.allowReturn && !!returnTargetStep;
     const existingReturn = await this.prisma.db.transition.findFirst({ where: { fromStepId: stepId, action: 'Return' } });
 
     if (wantsReturn) {
       if (!existingReturn) {
-        await this.prisma.db.transition.create({ data: { fromStepId: stepId, action: 'Return', toStepId: previousStep!.id } });
-      } else if (existingReturn.toStepId !== previousStep!.id) {
-        await this.prisma.db.transition.update({ where: { id: existingReturn.id }, data: { toStepId: previousStep!.id } });
+        await this.prisma.db.transition.create({ data: { fromStepId: stepId, action: 'Return', toStepId: returnTargetStep!.id } });
+      } else if (existingReturn.toStepId !== returnTargetStep!.id) {
+        await this.prisma.db.transition.update({ where: { id: existingReturn.id }, data: { toStepId: returnTargetStep!.id } });
       }
     } else if (existingReturn) {
       await this.prisma.db.transition.update({ where: { id: existingReturn.id }, data: { metaIsDeleted: true, metaUpdatedAt: new Date() } });
@@ -310,9 +314,7 @@ export class WorkflowsService {
 
     const advanceAction = type === 'ActionTask' ? 'Submit' : 'Approve';
     const existingAdvance = await this.prisma.db.transition.findFirst({ where: { fromStepId: stepId, action: advanceAction } });
-    const siblingIds = new Set(
-      (await this.prisma.db.step.findMany({ where: { workflowDefinitionId, NOT: { id: stepId } } })).map((s) => s.id),
-    );
+    const siblingIds = new Set(siblingSteps.map((s) => s.id));
     const postedNextStepId = dto.nextStepId && siblingIds.has(dto.nextStepId) ? dto.nextStepId : null;
 
     if (!existingAdvance) {

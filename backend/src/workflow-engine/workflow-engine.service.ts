@@ -41,6 +41,8 @@ export class WorkflowEngineService {
       throw new BadRequestException(`Action '${action}' is not allowed from the current step.`);
     }
 
+    const toStepId = transition.toStepId;
+
     await this.prisma.db.requestHistory.create({
       data: {
         requestId: request.id,
@@ -48,7 +50,7 @@ export class WorkflowEngineService {
         action,
         actorId,
         fromStepId: request.currentStepId,
-        toStepId: transition.toStepId,
+        toStepId,
         comment,
       },
     });
@@ -56,7 +58,7 @@ export class WorkflowEngineService {
     const now = new Date();
     let status: string;
     let completedAt: Date | null = null;
-    if (transition.toStepId == null) {
+    if (toStepId == null) {
       status = action === 'Reject' ? 'Terminated' : 'Completed';
       completedAt = now;
     } else if (action === 'Return') {
@@ -68,15 +70,15 @@ export class WorkflowEngineService {
     await this.prisma.db.request.update({
       where: { id: request.id },
       data: {
-        currentStepId: transition.toStepId,
-        currentStepEnteredAt: transition.toStepId != null ? now : null,
+        currentStepId: toStepId,
+        currentStepEnteredAt: toStepId != null ? now : null,
         slaEscalatedAt: null,
         status,
         completedAt,
       },
     });
 
-    const finalStepId = await this.autoRouteThroughConditionSteps(request.id, transition.toStepId);
+    const finalStepId = await this.autoRouteThroughConditionSteps(request.id, toStepId);
     await this.notifyForLanding(request.id, action, finalStepId);
   }
 

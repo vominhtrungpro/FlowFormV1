@@ -43,6 +43,7 @@ export function StepSettingsPanel({ step, design, onSaved }: Props) {
   const [formDefinitionId, setFormDefinitionId] = useState(step.formDefinitionId ?? 0);
   const [sequentialApproval, setSequentialApproval] = useState(step.sequentialApproval);
   const [allowReturn, setAllowReturn] = useState(step.transitionsFrom.some((t) => t.action === 'Return'));
+  const [returnToStepId, setReturnToStepId] = useState<number>(step.transitionsFrom.find((t) => t.action === 'Return')?.toStepId ?? 0);
   const [nextStepId, setNextStepId] = useState<number>(
     step.transitionsFrom.find((t) => t.action === (step.type === 'ActionTask' ? 'Submit' : 'Approve'))?.toStepId ?? 0,
   );
@@ -82,6 +83,7 @@ export function StepSettingsPanel({ step, design, onSaved }: Props) {
     setFormDefinitionId(step.formDefinitionId ?? 0);
     setSequentialApproval(step.sequentialApproval);
     setAllowReturn(step.transitionsFrom.some((t) => t.action === 'Return'));
+    setReturnToStepId(step.transitionsFrom.find((t) => t.action === 'Return')?.toStepId ?? 0);
     setNextStepId(step.transitionsFrom.find((t) => t.action === (step.type === 'ActionTask' ? 'Submit' : 'Approve'))?.toStepId ?? 0);
     setGatekeepers(step.gatekeepers.map((g) => ({ userId: g.userId, function: g.function })));
     setConditionRules(
@@ -96,6 +98,7 @@ export function StepSettingsPanel({ step, design, onSaved }: Props) {
   const isApprovalGate = type === 'ApprovalGate';
   const isCondition = type === 'Condition';
   const otherSteps = design.steps.filter((s) => s.id !== step.id);
+  const returnTargetSteps = otherSteps.filter((s) => s.type !== 'Condition');
   const actorOptions = actorType === 'Role' ? design.roleOptions : actorType === 'Tag' ? design.tagOptions : design.users.map((u) => u.email);
 
   async function onSubmit(e: React.FormEvent) {
@@ -111,6 +114,7 @@ export function StepSettingsPanel({ step, design, onSaved }: Props) {
       formDefinitionId: formDefinitionId || null,
       sequentialApproval,
       allowReturn,
+      returnToStepId: allowReturn ? returnToStepId || null : null,
       nextStepId: nextStepId || null,
       gatekeepers,
       conditionRules: conditionRules.map((r) => ({
@@ -376,11 +380,46 @@ export function StepSettingsPanel({ step, design, onSaved }: Props) {
           </div>
 
           {isApprovalGate && step.orderIndex > 0 && (
-            <div className="form-check mb-3">
-              <input type="checkbox" className="form-check-input" checked={allowReturn} onChange={(e) => setAllowReturn(e.target.checked)} id="allowReturn" />
-              <label className="form-check-label small" htmlFor="allowReturn">
-                Allow Return to previous step
-              </label>
+            <div className="mb-3 border rounded p-2">
+              <label className="form-label">Actions allowed at this step</label>
+              <div className="form-check">
+                <input type="checkbox" className="form-check-input" checked disabled id="allowApprove" />
+                <label className="form-check-label small" htmlFor="allowApprove">
+                  Approve
+                </label>
+              </div>
+              <div className="form-check">
+                <input type="checkbox" className="form-check-input" checked disabled id="allowReject" />
+                <label className="form-check-label small" htmlFor="allowReject">
+                  Reject
+                </label>
+              </div>
+              <div className="form-check">
+                <input
+                  type="checkbox"
+                  className="form-check-input"
+                  checked={allowReturn}
+                  onChange={(e) => setAllowReturn(e.target.checked)}
+                  id="allowReturn"
+                />
+                <label className="form-check-label small" htmlFor="allowReturn">
+                  Return
+                </label>
+              </div>
+              {allowReturn && (
+                <select
+                  className="form-select form-select-sm mt-2"
+                  value={returnToStepId}
+                  onChange={(e) => setReturnToStepId(Number(e.target.value))}
+                >
+                  <option value={0}>— Choose a step to return to —</option>
+                  {returnTargetSteps.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
           )}
 

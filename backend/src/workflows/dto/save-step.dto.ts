@@ -53,6 +53,10 @@ export class SaveStepDto {
 
   @IsOptional()
   @IsInt()
+  returnToStepId?: number | null;
+
+  @IsOptional()
+  @IsInt()
   nextStepId?: number | null;
 
   @IsOptional()

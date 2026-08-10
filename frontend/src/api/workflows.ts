@@ -104,6 +104,7 @@ export interface SaveStepPayload {
   formDefinitionId?: number | null;
   sequentialApproval?: boolean;
   allowReturn?: boolean;
+  returnToStepId?: number | null;
   nextStepId?: number | null;
   gatekeepers?: Array<{ userId: number; function: string }>;
   conditionRules?: Array<{ fieldId: number; operator: string; compareValue?: string | null; toStepId?: number | null }>;
