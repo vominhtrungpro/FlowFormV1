@@ -5,12 +5,14 @@ import {
   FieldDetail,
   FormDesignResponse,
   getFormDesign,
+  removeField,
   reorderFields,
   ReorderNode,
   saveFormMeta,
 } from '../api/forms';
 import { FieldSettingsPanel } from '../components/FieldSettingsPanel';
 import { FieldGroup } from '../components/FieldGroup';
+import { useConfirm } from '../components/ConfirmContext';
 
 const PALETTE = [
   'Text', 'LongText', 'Number', 'Date', 'Dropdown', 'YesNo', 'Checklist',
@@ -50,6 +52,7 @@ export function FormDesign() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewValues, setPreviewValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const confirmDialog = useConfirm();
 
   async function load(selectFieldId?: number) {
     const data = await getFormDesign(formId, selectFieldId ?? fieldId);
@@ -66,6 +69,15 @@ export function FormDesign() {
   async function onAddField(type: string, parentFieldId?: number) {
     const { id: newId } = await addField(formId, type, parentFieldId);
     await load(newId);
+  }
+
+  async function onRemoveField(fieldToRemoveId: number, e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!(await confirmDialog('Remove this field? This cannot be undone.'))) return;
+    const keepSelection = design?.selected?.id !== fieldToRemoveId ? design?.selected?.id : undefined;
+    await removeField(fieldToRemoveId);
+    await load(keepSelection);
   }
 
   async function submitStructure(structure: ReorderNode[]) {
@@ -193,20 +205,25 @@ export function FormDesign() {
             f.type === 'Section' ? (
               <div key={f.id} className="fb-section">
                 <a
-                  className={`fb-section-h ${f.id === design.selected?.id ? 'on' : ''}`}
+                  className={`fb-section-h d-flex align-items-center justify-content-between ${f.id === design.selected?.id ? 'on' : ''}`}
                   draggable
                   onDragStart={() => setDraggedId(f.id)}
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => onDropOnTopLevel(e, f.id)}
                   onClick={() => load(f.id)}
                 >
-                  <strong>{f.label}</strong> <span className="badge text-bg-secondary ms-1">Section</span>
+                  <span>
+                    <strong>{f.label}</strong> <span className="badge text-bg-secondary ms-1">Section</span>
+                  </span>
+                  <button type="button" className="row-remove" title="Remove section" onClick={(e) => onRemoveField(f.id, e)}>
+                    ✕
+                  </button>
                 </a>
                 <div className="fb-section-children" onDragOver={(e) => e.preventDefault()} onDrop={(e) => onDropOnSection(e, f.id)}>
                   {childrenOf(f.id).map((c) => (
                     <a
                       key={c.id}
-                      className={`fb-field small ${c.id === design.selected?.id ? 'on' : ''}`}
+                      className={`fb-field small d-flex align-items-center justify-content-between ${c.id === design.selected?.id ? 'on' : ''}`}
                       draggable
                       onDragStart={(e) => {
                         e.stopPropagation();
@@ -216,7 +233,12 @@ export function FormDesign() {
                       onDrop={(e) => onDropOnSection(e, f.id, c.id)}
                       onClick={() => load(c.id)}
                     >
-                      {c.label} <span className="text-muted">({c.type})</span>
+                      <span>
+                        {c.label} <span className="text-muted">({c.type})</span>
+                      </span>
+                      <button type="button" className="row-remove" title="Remove field" onClick={(e) => onRemoveField(c.id, e)}>
+                        ✕
+                      </button>
                     </a>
                   ))}
                   {childrenOf(f.id).length === 0 && <div className="text-muted small">Drop fields here.</div>}
@@ -225,15 +247,20 @@ export function FormDesign() {
             ) : (
               <a
                 key={f.id}
-                className={`fb-field ${f.id === design.selected?.id ? 'on' : ''}`}
+                className={`fb-field d-flex align-items-center justify-content-between ${f.id === design.selected?.id ? 'on' : ''}`}
                 draggable
                 onDragStart={() => setDraggedId(f.id)}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={(e) => onDropOnTopLevel(e, f.id)}
                 onClick={() => load(f.id)}
               >
-                <strong>{f.label}</strong> <span className="ms-2 badge text-bg-secondary">{f.type}</span>
-                {f.required && <span className="ms-1 text-danger">*</span>}
+                <span>
+                  <strong>{f.label}</strong> <span className="ms-2 badge text-bg-secondary">{f.type}</span>
+                  {f.required && <span className="ms-1 text-danger">*</span>}
+                </span>
+                <button type="button" className="row-remove" title="Remove field" onClick={(e) => onRemoveField(f.id, e)}>
+                  ✕
+                </button>
               </a>
             ),
           )}

@@ -117,6 +117,7 @@ export class WorkflowsService {
     if (!workflow) throw new NotFoundException();
 
     await this.prisma.db.workflowDefinition.update({ where: { id: workflowId }, data: { metaIsDeleted: true, metaUpdatedAt: new Date() } });
+    await this.prisma.db.step.updateMany({ where: { workflowDefinitionId: workflowId }, data: { metaIsDeleted: true, metaUpdatedAt: new Date() } });
 
     const requestType = await this.prisma.db.requestType.findFirst({ where: { id: workflow.requestTypeId } });
     if (requestType?.currentWorkflowDefinitionId === workflowId) {

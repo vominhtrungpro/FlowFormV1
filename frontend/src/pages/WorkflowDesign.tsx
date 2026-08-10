@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { addStep, DesignResponse, getWorkflowDesign, reorderSteps, saveWorkflowMeta } from '../api/workflows';
+import { addStep, DesignResponse, getWorkflowDesign, removeStep, reorderSteps, saveWorkflowMeta } from '../api/workflows';
 import { StepSettingsPanel } from '../components/StepSettingsPanel';
+import { useConfirm } from '../components/ConfirmContext';
+import { useToast } from '../components/ToastContext';
 
 const PALETTE = ['ApprovalGate', 'ActionTask', 'Condition', 'SystemCall', 'Notification'];
 
@@ -17,6 +19,8 @@ export function WorkflowDesign() {
   const [error, setError] = useState<string | null>(null);
   const [metaName, setMetaName] = useState('');
   const [saving, setSaving] = useState(false);
+  const confirmDialog = useConfirm();
+  const notify = useToast();
 
   async function load(selectStepId?: number) {
     const data = await getWorkflowDesign(workflowId, selectStepId ?? stepId);
@@ -37,6 +41,20 @@ export function WorkflowDesign() {
       await load(newId);
     } catch (e: any) {
       setError(e?.response?.data?.message ?? 'Could not add the step.');
+    }
+  }
+
+  async function onRemoveStep(stepToRemoveId: number, e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!(await confirmDialog('Remove this step? This cannot be undone.'))) return;
+    setError(null);
+    try {
+      const result = await removeStep(stepToRemoveId);
+      if (result.notice) notify(result.notice, 'info');
+      await load(result.selectedStepId ?? undefined);
+    } catch (e: any) {
+      setError(e?.response?.data?.message ?? 'Could not remove the step.');
     }
   }
 
@@ -159,6 +177,9 @@ export function WorkflowDesign() {
                 <span className="nn">{i + 1}</span>
                 <span className="nt">{s.name}</span>
                 <span className="ms-auto badge text-bg-secondary">{s.type}</span>
+                <button type="button" className="row-remove" title="Remove step" onClick={(e) => onRemoveStep(s.id, e)}>
+                  ✕
+                </button>
               </div>
               <div className="nm">{s.actorType === 'User' || s.actorType === 'Role' || s.actorType === 'Tag' ? s.actorRef : s.type}</div>
             </a>

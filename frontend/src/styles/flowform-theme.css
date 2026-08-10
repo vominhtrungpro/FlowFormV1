@@ -262,6 +262,11 @@ h1, .h3 { text-transform: uppercase; letter-spacing: .03em; }
 .fb-section-h.on { background: #fff; }
 .fb-section-children { padding: 0 11px 10px 22px; min-height: 24px; }
 .fb-section-children .fb-field { background: #fff; }
+.row-remove {
+  border: none; background: none; padding: 2px 7px; margin-left: 8px; line-height: 1;
+  color: var(--muted); font-size: 15px; font-weight: 700; border-radius: var(--r); flex: none; cursor: pointer;
+}
+.row-remove:hover { color: var(--red); background: var(--red-wash); }
 .dz-add {
   display: block; width: 100%; text-align: center; color: var(--muted);
   border: 1.5px dashed var(--line); border-radius: var(--r); background: none;
