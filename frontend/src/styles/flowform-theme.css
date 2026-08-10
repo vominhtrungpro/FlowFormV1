@@ -229,6 +229,10 @@ h1, .h3 { text-transform: uppercase; letter-spacing: .03em; }
     linear-gradient(rgba(14,23,32,.045) 1px, transparent 1px) 0 0/20px 20px, #fff;
 }
 .dz-canvas.drop-target { background-color: var(--brand-wash); }
+.node.dragging { opacity: .35; cursor: grabbing; }
+.fb-field.dragging { opacity: .35; }
+.fb-section.dragging { opacity: .35; }
+.fb-section-children.drop-target { outline: 2px dashed var(--brand-2); outline-offset: -2px; border-radius: var(--r); }
 .palette-i {
   display: flex; align-items: center; gap: 8px; padding: 7px 9px;
   border: 1px solid var(--line); border-radius: var(--r); background: #fff;

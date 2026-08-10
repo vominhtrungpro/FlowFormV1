@@ -16,6 +16,7 @@ export function WorkflowDesign() {
 
   const [design, setDesign] = useState<DesignResponse | null>(null);
   const [draggedStepId, setDraggedStepId] = useState<number | null>(null);
+  const [dropTarget, setDropTarget] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [metaName, setMetaName] = useState('');
   const [saving, setSaving] = useState(false);
@@ -66,6 +67,7 @@ export function WorkflowDesign() {
     ids.splice(from, 1);
     ids.splice(to, 0, draggedStepId);
     setDraggedStepId(null);
+    setDropTarget(false);
     setError(null);
     try {
       await reorderSteps(workflowId, ids);
@@ -134,7 +136,10 @@ export function WorkflowDesign() {
               key={t}
               className="palette-i"
               draggable
-              onDragStart={(e) => e.dataTransfer.setData('new-step-type', t)}
+              onDragStart={(e) => {
+                e.dataTransfer.setData('new-step-type', t);
+                e.dataTransfer.effectAllowed = 'copy';
+              }}
               onDoubleClick={() => onAddStep(t)}
               title="Drag onto the canvas, or double-click to add"
             >
@@ -147,9 +152,16 @@ export function WorkflowDesign() {
         </div>
 
         <div
-          className="dz-canvas"
-          onDragOver={(e) => e.preventDefault()}
+          className={`dz-canvas ${dropTarget ? 'drop-target' : ''}`}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDropTarget(true);
+          }}
+          onDragLeave={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropTarget(false);
+          }}
           onDrop={(e) => {
+            setDropTarget(false);
             const newType = e.dataTransfer.getData('new-step-type');
             if (newType) onAddStep(newType);
           }}
@@ -161,12 +173,22 @@ export function WorkflowDesign() {
           {design.steps.map((s, i) => (
             <a
               key={s.id}
-              className={`node ${s.id === design.selected?.id ? 'on' : ''}`}
+              className={`node ${s.id === design.selected?.id ? 'on' : ''} ${s.id === draggedStepId ? 'dragging' : ''}`}
               draggable
-              onDragStart={() => setDraggedStepId(s.id)}
-              onDragOver={(e) => e.preventDefault()}
+              onDragStart={(e) => {
+                setDraggedStepId(s.id);
+                // Some browsers/webviews silently abort a drag session that never calls
+                // setData() on dragstart — matching the old app's wireDrag().
+                e.dataTransfer.setData('reorder-step-id', String(s.id));
+                e.dataTransfer.effectAllowed = 'move';
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDropTarget(true);
+              }}
               onDrop={(e) => {
                 e.preventDefault();
+                setDropTarget(false);
                 const newType = e.dataTransfer.getData('new-step-type');
                 if (newType) onAddStep(newType);
                 else onDropReorder(s.id);

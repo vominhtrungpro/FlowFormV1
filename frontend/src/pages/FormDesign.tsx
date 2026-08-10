@@ -48,6 +48,7 @@ export function FormDesign() {
 
   const [design, setDesign] = useState<FormDesignResponse | null>(null);
   const [draggedId, setDraggedId] = useState<number | null>(null);
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [metaName, setMetaName] = useState('');
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewValues, setPreviewValues] = useState<Record<string, string>>({});
@@ -71,6 +72,15 @@ export function FormDesign() {
     await load(newId);
   }
 
+  function onFieldDragStart(e: React.DragEvent, id: number) {
+    setDraggedId(id);
+    // Some browsers/webviews silently abort a drag session that never calls setData() on
+    // dragstart — matching the old app's wireDrag(), which always sets a payload even though
+    // the actual reorder here only ever reads React state (draggedId) back on drop.
+    e.dataTransfer.setData('reorder-field-id', String(id));
+    e.dataTransfer.effectAllowed = 'move';
+  }
+
   async function onRemoveField(fieldToRemoveId: number, e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
@@ -88,6 +98,7 @@ export function FormDesign() {
   async function onDropOnTopLevel(e: React.DragEvent, beforeId?: number) {
     e.preventDefault();
     e.stopPropagation();
+    setDropTarget(null);
     const newType = e.dataTransfer.getData('new-field-type');
     if (newType) return onAddField(newType);
     if (!design || draggedId == null) return;
@@ -102,6 +113,7 @@ export function FormDesign() {
   async function onDropOnSection(e: React.DragEvent, sectionId: number, beforeChildId?: number) {
     e.preventDefault();
     e.stopPropagation();
+    setDropTarget(null);
     const newType = e.dataTransfer.getData('new-field-type');
     if (newType) {
       if (newType === 'Section') return; // sections can't nest
@@ -184,7 +196,10 @@ export function FormDesign() {
               key={t}
               className="palette-i"
               draggable
-              onDragStart={(e) => e.dataTransfer.setData('new-field-type', t)}
+              onDragStart={(e) => {
+                e.dataTransfer.setData('new-field-type', t);
+                e.dataTransfer.effectAllowed = 'copy';
+              }}
               onDoubleClick={() => onAddField(t)}
               title="Drag onto the canvas, or double-click to add"
             >
@@ -196,19 +211,33 @@ export function FormDesign() {
           </div>
         </div>
 
-        <div className="dz-canvas" id="fieldCanvas" onDragOver={(e) => e.preventDefault()} onDrop={(e) => onDropOnTopLevel(e)}>
+        <div
+          className={`dz-canvas ${dropTarget === 'top' ? 'drop-target' : ''}`}
+          id="fieldCanvas"
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDropTarget('top');
+          }}
+          onDragLeave={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropTarget(null);
+          }}
+          onDrop={(e) => onDropOnTopLevel(e)}
+        >
           <div className="canvas-label">
             {design.form.name} · v{design.form.versionNumber} · {design.form.status}
           </div>
           {topLevelFields.length === 0 && <p className="text-muted small mb-3">No fields yet — drag a type onto the canvas.</p>}
           {topLevelFields.map((f) =>
             f.type === 'Section' ? (
-              <div key={f.id} className="fb-section">
+              <div key={f.id} className={`fb-section ${f.id === draggedId ? 'dragging' : ''}`}>
                 <a
                   className={`fb-section-h d-flex align-items-center justify-content-between ${f.id === design.selected?.id ? 'on' : ''}`}
                   draggable
-                  onDragStart={() => setDraggedId(f.id)}
-                  onDragOver={(e) => e.preventDefault()}
+                  onDragStart={(e) => onFieldDragStart(e, f.id)}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setDropTarget('top');
+                  }}
                   onDrop={(e) => onDropOnTopLevel(e, f.id)}
                   onClick={() => load(f.id)}
                 >
@@ -219,17 +248,32 @@ export function FormDesign() {
                     ✕
                   </button>
                 </a>
-                <div className="fb-section-children" onDragOver={(e) => e.preventDefault()} onDrop={(e) => onDropOnSection(e, f.id)}>
+                <div
+                  className={`fb-section-children ${dropTarget === `section-${f.id}` ? 'drop-target' : ''}`}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setDropTarget(`section-${f.id}`);
+                  }}
+                  onDragLeave={(e) => {
+                    if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropTarget(null);
+                  }}
+                  onDrop={(e) => onDropOnSection(e, f.id)}
+                >
                   {childrenOf(f.id).map((c) => (
                     <a
                       key={c.id}
-                      className={`fb-field small d-flex align-items-center justify-content-between ${c.id === design.selected?.id ? 'on' : ''}`}
+                      className={`fb-field small d-flex align-items-center justify-content-between ${c.id === design.selected?.id ? 'on' : ''} ${c.id === draggedId ? 'dragging' : ''}`}
                       draggable
                       onDragStart={(e) => {
                         e.stopPropagation();
-                        setDraggedId(c.id);
+                        onFieldDragStart(e, c.id);
                       }}
-                      onDragOver={(e) => e.preventDefault()}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setDropTarget(`section-${f.id}`);
+                      }}
                       onDrop={(e) => onDropOnSection(e, f.id, c.id)}
                       onClick={() => load(c.id)}
                     >
@@ -247,10 +291,13 @@ export function FormDesign() {
             ) : (
               <a
                 key={f.id}
-                className={`fb-field d-flex align-items-center justify-content-between ${f.id === design.selected?.id ? 'on' : ''}`}
+                className={`fb-field d-flex align-items-center justify-content-between ${f.id === design.selected?.id ? 'on' : ''} ${f.id === draggedId ? 'dragging' : ''}`}
                 draggable
-                onDragStart={() => setDraggedId(f.id)}
-                onDragOver={(e) => e.preventDefault()}
+                onDragStart={(e) => onFieldDragStart(e, f.id)}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDropTarget('top');
+                }}
                 onDrop={(e) => onDropOnTopLevel(e, f.id)}
                 onClick={() => load(f.id)}
               >
