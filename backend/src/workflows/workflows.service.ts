@@ -262,6 +262,15 @@ export class WorkflowsService {
         escalateTo: dto.escalateTo ?? null,
         formDefinitionId: isCondition ? null : dto.formDefinitionId ?? null,
         sequentialApproval: isApprovalGate ? !!dto.sequentialApproval : false,
+        // ApprovalGate defaults to fanning a Task out to every resolved gatekeeper (Gate-Review-
+        // style, matching the pre-Task consensus behavior this replaces) unless the designer
+        // picked something else; every other step type only ever gets a single Task.
+        taskFanOutMode: isApprovalGate ? dto.taskFanOutMode ?? 'PerPerson' : 'OneForStep',
+        // ClaimFirst ("one shared task, whoever claims first keeps it") reuses the existing Any-
+        // resolution/cancel-siblings path rather than a bespoke claim mechanism — the moment
+        // anyone acts, cancelOpenTasksForStep cancels the rest, which *is* claiming it.
+        resolutionRule: !isApprovalGate ? 'All' : dto.taskFanOutMode === 'ClaimFirst' ? 'Any' : dto.resolutionRule ?? 'All',
+        quorumCount: isApprovalGate && dto.resolutionRule === 'Quorum' && dto.taskFanOutMode !== 'ClaimFirst' ? dto.quorumCount ?? null : null,
       },
     });
 

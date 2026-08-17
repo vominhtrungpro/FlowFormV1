@@ -26,8 +26,9 @@ model User {
   tag          String // free-text job title, e.g. "developer", "project_manager"
 
   gatekeeperOf     StepGatekeeper[]
-  approvals        StepApproval[]
   notifications    Notification[]
+  tasksAssigned    Task[] @relation("TaskAssignee")
+  tasksOriginal    Task[] @relation("TaskOriginalAssignee")
 
   @@map("app_user")
 }
@@ -90,7 +91,9 @@ model Step {
   escalateTo           String? // comma-separated emails
   formDefinitionId     Int?
   formDefinition       FormDefinition? @relation(fields: [formDefinitionId], references: [id])
-  resolutionRule       String? // ResolutionRule — unused today, carried for parity
+  resolutionRule       String  @default("All") // ResolutionRule: All | Any | Quorum — evaluated against this step's open Tasks
+  quorumCount          Int? // only meaningful when resolutionRule = "Quorum"
+  taskFanOutMode       String  @default("OneForStep") // TaskFanOutMode: PerPerson | OneForStep — PerPerson is Gate-Review-style, one Task per resolved actor
   cannotPassUntilJson  String? // unused today, carried for parity
   sequentialApproval   Boolean @default(false)
 
@@ -103,7 +106,7 @@ model Step {
   requestHistoriesAsStep     RequestHistory[] @relation("HistoryStep")
   requestHistoriesAsFromStep RequestHistory[] @relation("HistoryFromStep")
   requestHistoriesAsToStep   RequestHistory[] @relation("HistoryToStep")
-  approvals        StepApproval[]
+  tasks            Task[]
 
   @@map("step")
 }
@@ -244,11 +247,10 @@ model Request {
   currentStepEnteredAt DateTime?
   status               String  // RequestStatus
   completedAt          DateTime?
-  slaEscalatedAt       DateTime? // reset to null every time currentStepId changes
 
   fieldValues RequestFieldValue[]
   histories   RequestHistory[]
-  approvals   StepApproval[]
+  tasks       Task[]
   notifications Notification[]
 
   @@map("request")
@@ -266,6 +268,12 @@ model RequestFieldValue {
   request   Request @relation(fields: [requestId], references: [id])
   fieldId   Int
   field     Field   @relation(fields: [fieldId], references: [id])
+  // Null for every step that only ever has one Task (ActionTask, single-gatekeeper/OneForStep
+  // ApprovalGate) — same shared-per-request value as before. Set to a specific Task's id only on
+  // a PerPerson-fanned-out step, where each gatekeeper's own form answer must stay independent of
+  // the others' (they'd otherwise silently overwrite each other's "Căn cứ quyết định" etc).
+  taskId Int?
+  task   Task?   @relation(fields: [taskId], references: [id])
   value     String
 
   @@map("request_field_value")
@@ -294,7 +302,13 @@ model RequestHistory {
   @@map("request_history")
 }
 
-model StepApproval {
+// Ports task-mo-ta-cho-dev.html's "Task" concept: a per-person, per-step work item spawned eagerly
+// the instant a request enters a step (never lazily, never regenerated on read — see
+// spawnTasksForStep in workflow-engine.service.ts), and closed/cancelled by the engine, never by
+// the UI. Supersedes StepApproval outright: StepApproval only ever recorded a vote reactively at
+// approval time, so it had no row to represent "assigned but not yet acted on," no per-person due
+// date, and no cancellation trail — all of which the spec's rules require.
+model Task {
   id             Int      @id @default(autoincrement())
   metaIsDeleted  Boolean  @default(false)
   metaCreatedAt  DateTime @default(now())
@@ -302,15 +316,27 @@ model StepApproval {
   metaCreatedBy  Int?
   metaUpdatedBy  Int?
 
-  requestId Int
-  request   Request @relation(fields: [requestId], references: [id])
-  stepId    Int
-  step      Step    @relation(fields: [stepId], references: [id])
-  userId    Int
-  user      User    @relation(fields: [userId], references: [id])
-  comment   String?
+  requestId          Int
+  request            Request @relation(fields: [requestId], references: [id])
+  stepId             Int
+  step               Step    @relation(fields: [stepId], references: [id])
+  assigneeId         Int
+  assignee           User    @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  originalAssigneeId Int?
+  originalAssignee   User?   @relation("TaskOriginalAssignee", fields: [originalAssigneeId], references: [id])
+  function           String? // gatekeeper "department" label, e.g. "Process Technology" — null outside ApprovalGate
+  status             String  @default("Open") // TaskStatus: Open | Approved | Rejected | Returned | Cancelled | NotApplicable
+  requiredForResolution Boolean @default(true) // false = "not applicable" — kept in the table, excluded from resolutionRule
+  reason             String // "why assigned", captured at creation — e.g. "Role — Gate Keeper, Process Technology (OMS)"
+  dueAt              DateTime? // null when the step has no SLA configured — never a fake/invented date
+  escalatedAt        DateTime? // guards the SLA job so a breached task is only escalated once
+  comment            String?
+  cancelReason       String?
 
-  @@map("step_approval")
+  notifications      Notification[]
+  requestFieldValues RequestFieldValue[]
+
+  @@map("task")
 }
 
 model Notification {
@@ -325,6 +351,8 @@ model Notification {
   user      User    @relation(fields: [userId], references: [id])
   requestId Int
   request   Request @relation(fields: [requestId], references: [id])
+  taskId    Int?
+  task      Task?   @relation(fields: [taskId], references: [id])
   message   String
   isRead    Boolean @default(false)
   readAt    DateTime?

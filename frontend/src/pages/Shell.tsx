@@ -3,6 +3,7 @@ import { useAuth } from '../auth/AuthContext';
 import { NotificationBell } from '../components/NotificationBell';
 
 const CRUMBS: Record<string, string> = {
+  '/tasks': 'Requests',
   '/requests': 'Requests',
   '/workflows': 'Design',
   '/forms': 'Design',
@@ -10,6 +11,7 @@ const CRUMBS: Record<string, string> = {
 };
 
 const TITLES: Record<string, string> = {
+  '/tasks': 'My tasks',
   '/requests': 'Request list',
   '/workflows': 'Workflow list',
   '/forms': 'Form list',
@@ -47,6 +49,13 @@ export function Shell() {
         </div>
         <nav className="ff-rail-nav">
           <div className="ff-nav-grp">Requests</div>
+          <NavLink to="/tasks" className={navClass}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 11l3 3L22 4" />
+              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+            </svg>
+            <span>My tasks</span>
+          </NavLink>
           <NavLink to="/requests" className={navClass}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
               <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />

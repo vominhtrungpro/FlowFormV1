@@ -202,15 +202,20 @@ export class RequestsService {
     return { id: request.id };
   }
 
-  private async saveFieldValues(requestId: number, fields: Array<{ id: number }>, values: Record<string, string>, userId: number) {
+  // taskId scopes the value to one specific Task instead of the whole request — only passed when
+  // the current step fans a Task out per person (PerPerson), so each gatekeeper's own form answer
+  // (e.g. "Căn cứ quyết định") stays independent instead of the last submitter silently
+  // overwriting everyone else's. Every other step (single actor, or OneForStep) keeps the
+  // pre-existing shared-per-request row (taskId: null), unchanged.
+  private async saveFieldValues(requestId: number, fields: Array<{ id: number }>, values: Record<string, string>, userId: number, taskId?: number) {
     for (const field of fields) {
       const value = values[String(field.id)];
       if (value === undefined) continue;
-      const existing = await this.prisma.db.requestFieldValue.findFirst({ where: { requestId, fieldId: field.id } });
+      const existing = await this.prisma.db.requestFieldValue.findFirst({ where: { requestId, fieldId: field.id, taskId: taskId ?? null } });
       if (existing) {
         await this.prisma.db.requestFieldValue.update({ where: { id: existing.id }, data: { value, metaUpdatedAt: new Date(), metaUpdatedBy: userId } });
       } else {
-        await this.prisma.db.requestFieldValue.create({ data: { requestId, fieldId: field.id, value, metaCreatedBy: userId } });
+        await this.prisma.db.requestFieldValue.create({ data: { requestId, fieldId: field.id, taskId, value, metaCreatedBy: userId } });
       }
     }
   }
@@ -233,26 +238,7 @@ export class RequestsService {
     return request;
   }
 
-  // Ports RequestController.AutoAdvanceFullyApprovedSteps: guards against a request landing back
-  // on an ApprovalGate (via Return) where every currently-assigned gatekeeper already voted before
-  // — nobody would be left who can click Approve, so the system auto-advances it instead.
-  private async autoAdvanceFullyApprovedSteps(id: number) {
-    for (let i = 0; i < 10; i++) {
-      const request = await this.loadRequest(id);
-      const gatekeepers = request.currentStep?.gatekeepers ?? [];
-      if (request.currentStep?.type !== 'ApprovalGate' || gatekeepers.length <= 1) return;
-
-      const votedUserIds = new Set(
-        (await this.prisma.db.stepApproval.findMany({ where: { requestId: id, stepId: request.currentStepId! } })).map((a) => a.userId),
-      );
-      if (!gatekeepers.every((g) => votedUserIds.has(g.userId))) return;
-
-      await this.engine.execute(id, 'Approve', 'system', 'Auto-advanced — every gatekeeper on this step had already approved this request.');
-    }
-  }
-
   async getDetail(user: CurrentUserPayload, id: number) {
-    await this.autoAdvanceFullyApprovedSteps(id);
     const request = await this.loadRequest(id);
 
     if (!this.isAdmin(user)) {
@@ -283,9 +269,21 @@ export class RequestsService {
     }
 
     const availableActions = await this.engine.getAvailableActions(request.currentStepId);
-    const canAct = request.currentStepId != null && (await this.actorResolver.matchesCurrentUser(request.currentStep!, user, request));
+    // Matches act()'s gate: holding an Open Task is sufficient on its own (covers escalateTo/
+    // admin-fallback assignees matchesCurrentUser doesn't know about), matchesCurrentUser is the
+    // fallback for anyone matched but not yet holding a Task.
+    const canAct =
+      request.currentStepId != null &&
+      (this.isAdmin(user) ||
+        (await this.prisma.db.task.findFirst({
+          where: { requestId: id, stepId: request.currentStepId, assigneeId: user.userId, status: 'Open' },
+        })) != null ||
+        (await this.actorResolver.matchesCurrentUser(request.currentStep!, user, request)));
 
-    const fieldValueRows = await this.prisma.db.requestFieldValue.findMany({ where: { requestId: id } });
+    // taskId: null only — a PerPerson step's per-task answers don't have one "the" value to show
+    // here (that's what the task's own sibling-task table and per-task form are for); the
+    // aggregate request view only ever shows the shared, single-actor-step kind of answer.
+    const fieldValueRows = await this.prisma.db.requestFieldValue.findMany({ where: { requestId: id, taskId: null } });
     const fieldValues: Record<number, string> = {};
     for (const fv of fieldValueRows) fieldValues[fv.fieldId] = fv.value;
 
@@ -295,32 +293,32 @@ export class RequestsService {
     let waitingOnEmail: string | undefined;
 
     const activeGatekeepers = request.currentStep?.gatekeepers ?? [];
-    if (request.currentStep?.type === 'ApprovalGate' && activeGatekeepers.length > 1) {
-      const votes = await this.prisma.db.stepApproval.findMany({ where: { requestId: id, stepId: request.currentStepId! } });
-      const votesByUserId = new Map(votes.map((v) => [v.userId, v]));
+    if (request.currentStep?.type === 'ApprovalGate' && activeGatekeepers.length > 1 && request.currentStepId != null) {
+      // Scoped to *this visit* — a Task from a prior Return-then-resubmit cycle to this same step
+      // doesn't count (task-mo-ta-cho-dev.html rule 3: "chữ ký vòng trước không còn giá trị").
+      const sinceEnteredAt = request.currentStepEnteredAt ?? request.metaCreatedAt;
+      const tasks = await this.prisma.db.task.findMany({
+        where: { requestId: id, stepId: request.currentStepId, metaCreatedAt: { gte: sinceEnteredAt } },
+        orderBy: { id: 'asc' },
+      });
       const users = await this.prisma.db.user.findMany();
       const usersById = new Map(users.map((u) => [u.id, u]));
 
-      gatekeeperApprovals = activeGatekeepers
-        .sort((a, b) => a.id - b.id)
-        .map((g) => {
-          const vote = votesByUserId.get(g.userId);
-          return {
-            email: usersById.get(g.userId)?.email,
-            function: g.function,
-            approved: !!vote,
-            approvedAt: vote?.metaCreatedAt ?? null,
-            comment: vote?.comment ?? null,
-          };
-        });
+      gatekeeperApprovals = tasks.map((t) => ({
+        email: usersById.get(t.assigneeId)?.email,
+        function: t.function ?? '—',
+        approved: t.status === 'Approved',
+        approvedAt: t.status !== 'Open' ? t.metaUpdatedAt : null,
+        comment: t.comment,
+      }));
 
-      alreadyVotedWaiting = !this.isAdmin(user) && votesByUserId.has(user.userId);
+      const myTask = tasks.find((t) => t.assigneeId === user.userId);
+      alreadyVotedWaiting = !this.isAdmin(user) && !!myTask && myTask.status !== 'Open';
 
       if (request.currentStep.sequentialApproval) {
-        const ordered = [...activeGatekeepers].sort((a, b) => a.id - b.id);
-        const nextUp = ordered.find((g) => !votesByUserId.has(g.userId));
-        notYourTurn = !this.isAdmin(user) && !!nextUp && nextUp.userId !== user.userId && !votesByUserId.has(user.userId);
-        waitingOnEmail = nextUp ? usersById.get(nextUp.userId)?.email : undefined;
+        const openTask = tasks.find((t) => t.status === 'Open');
+        notYourTurn = !this.isAdmin(user) && activeGatekeepers.some((g) => g.userId === user.userId) && openTask?.assigneeId !== user.userId;
+        waitingOnEmail = openTask ? usersById.get(openTask.assigneeId)?.email : undefined;
       }
     }
 
@@ -413,83 +411,96 @@ export class RequestsService {
 
   async act(user: CurrentUserPayload, id: number, action: TransitionAction, comment: string | undefined, fieldValues: Record<string, string> | undefined) {
     const request = await this.loadRequest(id);
-    if (request.currentStepId == null || !(await this.actorResolver.matchesCurrentUser(request.currentStep!, user, request))) {
+    if (request.currentStepId == null) {
       throw new ForbiddenException("You're not the \"who acts\" for the current step, so you can't act on this request.");
     }
 
     const actorId = user.email;
     const trimmedComment = comment?.trim() || null;
+    const admin = this.isAdmin(user);
+    const stepId = request.currentStepId;
+
+    // Every permission check here is server-side (rule 5) — a hidden/disabled button client-side
+    // is convenience only. Admin bypasses task bookkeeping entirely and forces the transition
+    // directly, same as before this rewrite: their action was never gated on holding a vote.
+    // Holding an Open Task is authorization on its own, and is now the *only* gate — it's strictly
+    // more precise than the old matchesCurrentUser check, since it also covers actors
+    // matchesCurrentUser has no way to know about (an escalateTo recipient, an admin-fallback
+    // assignee), given Tasks are only ever spawned for someone the engine actually resolved.
+    const myTask = admin
+      ? null
+      : await this.prisma.db.task.findFirst({ where: { requestId: id, stepId, assigneeId: user.userId, status: 'Open' } });
+    if (!admin && !myTask) {
+      throw new ForbiddenException('You do not currently hold an open task for this step.');
+    }
+    // Step 0 is exempt — the requester acting on their own Submit step is the intended actor
+    // there (matchesCurrentUser's own orderIndex===0 special case), not a self-approval conflict.
+    if (!admin && action === 'Approve' && myTask && request.currentStep!.orderIndex !== 0 && request.metaCreatedBy === user.userId) {
+      throw new ForbiddenException("You created this request, so you can't approve it yourself — it's been escalated instead.");
+    }
 
     if (request.currentStep!.formDefinitionId && fieldValues) {
-      await this.saveFieldValues(id, request.currentStep!.formDefinition?.fields ?? [], fieldValues, user.userId);
+      const perTaskAnswers = !admin && myTask && request.currentStep!.taskFanOutMode !== 'OneForStep';
+      await this.saveFieldValues(id, request.currentStep!.formDefinition?.fields ?? [], fieldValues, user.userId, perTaskAnswers ? myTask!.id : undefined);
     }
 
-    const activeGatekeepers = [...(request.currentStep?.gatekeepers ?? [])].sort((a, b) => a.id - b.id);
-    const isMultiGatekeeperGate = request.currentStep?.type === 'ApprovalGate' && activeGatekeepers.length > 1;
-    const admin = this.isAdmin(user);
-
-    if (isMultiGatekeeperGate && request.currentStep!.sequentialApproval && !admin) {
-      const votedIds = new Set(
-        (await this.prisma.db.stepApproval.findMany({ where: { requestId: id, stepId: request.currentStepId } })).map((a) => a.userId),
-      );
-      const nextUp = activeGatekeepers.find((g) => !votedIds.has(g.userId));
-      if (nextUp && nextUp.userId !== user.userId) {
-        const nextUser = await this.prisma.db.user.findFirst({ where: { id: nextUp.userId } });
-        throw new BadRequestException(`It's not your turn to act yet — waiting on ${nextUser?.email} first.`);
-      }
+    if (admin) {
+      await this.engine.execute(id, action, actorId, trimmedComment);
+      return { ok: true };
     }
 
-    const needsConsensus = action === 'Approve' && isMultiGatekeeperGate && !admin;
-
-    if (needsConsensus) {
-      const votedIds = new Set(
-        (await this.prisma.db.stepApproval.findMany({ where: { requestId: id, stepId: request.currentStepId } })).map((a) => a.userId),
-      );
-      const alreadyVoted = votedIds.has(user.userId);
-
-      if (!alreadyVoted) {
-        await this.prisma.db.stepApproval.create({
-          data: { requestId: id, stepId: request.currentStepId!, userId: user.userId, comment: trimmedComment },
-        });
-      }
-
-      const votedUserIds = new Set(
-        (await this.prisma.db.stepApproval.findMany({ where: { requestId: id, stepId: request.currentStepId } })).map((a) => a.userId),
-      );
-
-      if (!activeGatekeepers.every((g) => votedUserIds.has(g.userId))) {
-        if (!alreadyVoted) {
-          await this.prisma.db.requestHistory.create({
-            data: {
-              requestId: id,
-              stepId: request.currentStepId,
-              action,
-              actorId,
-              fromStepId: request.currentStepId,
-              toStepId: request.currentStepId,
-              comment: trimmedComment,
-            },
-          });
-
-          if (request.currentStep!.sequentialApproval) {
-            const nextUp = activeGatekeepers.find((g) => !votedUserIds.has(g.userId));
-            if (nextUp) await this.notifications.notifyNextGatekeeper(request, request.currentStep!, nextUp.userId);
-          }
-        }
-
-        return {
-          notice: `Your approval was recorded (${votedUserIds.size}/${activeGatekeepers.length} gatekeepers so far) — waiting on the others before this moves forward.`,
-        };
-      }
+    const CLOSE_STATUS: Partial<Record<TransitionAction, string>> = { Approve: 'Approved', Submit: 'Approved', Reject: 'Rejected', Return: 'Returned' };
+    const closeStatus = CLOSE_STATUS[action];
+    if (closeStatus && myTask) {
+      await this.prisma.db.task.update({
+        where: { id: myTask.id },
+        data: { status: closeStatus, comment: trimmedComment, metaUpdatedAt: new Date() },
+      });
     }
 
-    await this.engine.execute(id, action, actorId, trimmedComment);
-    return { ok: true };
+    // Reject/Return short-circuit immediately (a single one sends the request away right now,
+    // same as before) — only the "advance" actions (Approve/Submit) wait on resolutionRule.
+    const isAdvanceAction = action === 'Approve' || action === 'Submit';
+    if (!isAdvanceAction) {
+      await this.engine.execute(id, action, actorId, trimmedComment);
+      return { ok: true };
+    }
+
+    const sinceEnteredAt = request.currentStepEnteredAt ?? request.metaCreatedAt;
+    const tasks = await this.prisma.db.task.findMany({ where: { requestId: id, stepId, metaCreatedAt: { gte: sinceEnteredAt } } });
+    const required = tasks.filter((t) => t.requiredForResolution);
+    const approvedCount = required.filter((t) => t.status === 'Approved').length;
+    const openRequiredCount = required.filter((t) => t.status === 'Open').length;
+
+    const resolutionRule = request.currentStep!.resolutionRule;
+    const satisfied =
+      resolutionRule === 'Any'
+        ? approvedCount >= 1
+        : resolutionRule === 'Quorum'
+        ? approvedCount >= (request.currentStep!.quorumCount ?? required.length)
+        : openRequiredCount === 0; // 'All' (default)
+
+    if (satisfied) {
+      await this.engine.execute(id, action, actorId, trimmedComment);
+      return { ok: true };
+    }
+
+    if (request.currentStep!.sequentialApproval) {
+      await this.engine.spawnNextSequentialTask(id, stepId);
+    }
+
+    return {
+      notice: `Your ${action.toLowerCase()} was recorded (${approvedCount}/${required.length} required so far) — waiting on the others before this moves forward.`,
+    };
   }
 
   async remove(user: CurrentUserPayload, id: number) {
     if (!this.isAdmin(user)) throw new ForbiddenException('Only admins can remove requests.');
     await this.prisma.db.request.update({ where: { id }, data: { metaIsDeleted: true, metaUpdatedAt: new Date(), metaUpdatedBy: user.userId } });
+    // Tasks don't cascade off their parent Request automatically (the soft-delete filter only
+    // looks at a row's own metaIsDeleted) — without this, a removed request's still-Open tasks
+    // would keep showing up in everyone's My Tasks inbox forever.
+    await this.prisma.db.task.updateMany({ where: { requestId: id }, data: { metaIsDeleted: true, metaUpdatedAt: new Date(), metaUpdatedBy: user.userId } });
   }
 
   async exportCsv(user: CurrentUserPayload, q?: string, requestTypeId?: number, status?: string) {

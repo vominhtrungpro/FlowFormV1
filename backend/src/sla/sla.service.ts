@@ -2,12 +2,11 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { PrismaService } from '../common/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { isSlaBreached } from './sla-calculator';
-import { SlaUnit } from '../common/enums';
 
-// Ports FlowFormDemo/Services/SlaEscalationJob.cs — @Interval replaces PeriodicTimer, otherwise
-// the same shape: scan requests sitting on a step past its configured SLA, escalate once per
-// step-visit (guarded by `slaEscalatedAt`, cleared whenever the request moves to a new step).
+// Ports FlowFormDemo/Services/SlaEscalationJob.cs, but scoped to individual Tasks now instead of
+// (request, current step) — a step with several Open tasks (Gate Review's fan-out) used to
+// escalate once for the whole request regardless of which gatekeeper was actually late; now each
+// overdue Task escalates independently, guarded by its own escalatedAt so it only fires once.
 @Injectable()
 export class SlaService {
   private readonly logger = new Logger(SlaService.name);
@@ -24,21 +23,17 @@ export class SlaService {
   }
 
   private async checkBreaches() {
-    const candidates = await this.prisma.db.request.findMany({
-      where: { currentStepId: { not: null }, slaEscalatedAt: null },
-      include: { currentStep: true },
+    const now = new Date();
+    const overdueTasks = await this.prisma.db.task.findMany({
+      where: { status: 'Open', escalatedAt: null, dueAt: { not: null, lt: now } },
+      include: { step: true, request: true },
     });
 
-    const now = new Date();
-    for (const request of candidates) {
-      const step = request.currentStep;
-      if (!step || step.slaValue == null || !step.slaUnit || !step.escalateTo) continue;
+    for (const task of overdueTasks) {
+      if (!task.step.escalateTo) continue;
 
-      const enteredAt = request.currentStepEnteredAt ?? request.metaCreatedAt;
-      if (!isSlaBreached(enteredAt, step.slaValue, step.slaUnit as SlaUnit, now)) continue;
-
-      await this.notifications.notifyEscalation(request, step);
-      await this.prisma.db.request.update({ where: { id: request.id }, data: { slaEscalatedAt: now } });
+      await this.notifications.notifyEscalation(task.request, task, task.step);
+      await this.prisma.db.task.update({ where: { id: task.id }, data: { escalatedAt: now } });
     }
   }
 }

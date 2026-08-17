@@ -1,5 +1,5 @@
 import { IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString } from 'class-validator';
-import { ActorType, ConditionOperator, SlaUnit, StepType } from '../../common/enums';
+import { ActorType, ConditionOperator, ResolutionRule, SlaUnit, StepType, TaskFanOutMode } from '../../common/enums';
 
 export class GatekeeperInput {
   userId!: number;
@@ -46,6 +46,18 @@ export class SaveStepDto {
   @IsOptional()
   @IsBoolean()
   sequentialApproval?: boolean;
+
+  @IsOptional()
+  @IsIn(TaskFanOutMode as unknown as string[])
+  taskFanOutMode?: (typeof TaskFanOutMode)[number];
+
+  @IsOptional()
+  @IsIn(ResolutionRule as unknown as string[])
+  resolutionRule?: (typeof ResolutionRule)[number];
+
+  @IsOptional()
+  @IsInt()
+  quorumCount?: number | null;
 
   @IsOptional()
   @IsBoolean()

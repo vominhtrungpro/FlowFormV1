@@ -14,6 +14,8 @@ import { WorkflowDesign } from './pages/WorkflowDesign';
 import { FormList } from './pages/FormList';
 import { FormDesign } from './pages/FormDesign';
 import { NotificationList } from './pages/NotificationList';
+import { TaskList } from './pages/TaskList';
+import { TaskDetail } from './pages/TaskDetail';
 
 export function App() {
   return (
@@ -29,6 +31,8 @@ export function App() {
                   <Route path="requests" element={<RequestList />} />
                   <Route path="requests/new" element={<RequestCreate />} />
                   <Route path="requests/:id" element={<RequestProcess />} />
+                  <Route path="tasks" element={<TaskList />} />
+                  <Route path="tasks/:id" element={<TaskDetail />} />
                   <Route path="workflows" element={<WorkflowList />} />
                   <Route path="workflows/:id" element={<WorkflowDesign />} />
                   <Route path="forms" element={<FormList />} />

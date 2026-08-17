@@ -68,7 +68,9 @@ export class ActorResolverService {
   // "Everyone whose who-acts points at this step right now" — resolved against the whole Users
   // table instead of a single logged-in user. For a sequential ApprovalGate, only the next unvoted
   // gatekeeper (in insertion/id order) is returned; for parallel, all active gatekeepers are.
-  async resolveStepRecipients(requestId: number, step: StepLike): Promise<number[]> {
+  // `sinceEnteredAt` scopes "voted" to Tasks from *this* visit to the step — a signature from a
+  // prior Return-then-resubmit cycle must not count (task-mo-ta-cho-dev.html rule 3).
+  async resolveStepRecipients(requestId: number, step: StepLike, sinceEnteredAt: Date): Promise<number[]> {
     if (step.type === 'ApprovalGate') {
       const active = await this.prisma.db.stepGatekeeper.findMany({
         where: { stepId: step.id },
@@ -78,7 +80,11 @@ export class ActorResolverService {
 
       if (step.sequentialApproval) {
         const voted = new Set(
-          (await this.prisma.db.stepApproval.findMany({ where: { requestId, stepId: step.id } })).map((a) => a.userId),
+          (
+            await this.prisma.db.task.findMany({
+              where: { requestId, stepId: step.id, status: 'Approved', metaCreatedAt: { gte: sinceEnteredAt } },
+            })
+          ).map((t) => t.assigneeId),
         );
         const nextUp = active.find((g) => !voted.has(g.userId));
         return nextUp ? [nextUp.userId] : [];

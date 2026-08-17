@@ -42,6 +42,9 @@ export function StepSettingsPanel({ step, design, onSaved }: Props) {
   const [escalateTo, setEscalateTo] = useState<string[]>(splitRef(step.escalateTo ?? ''));
   const [formDefinitionId, setFormDefinitionId] = useState(step.formDefinitionId ?? 0);
   const [sequentialApproval, setSequentialApproval] = useState(step.sequentialApproval);
+  const [taskFanOutMode, setTaskFanOutMode] = useState(step.taskFanOutMode);
+  const [resolutionRule, setResolutionRule] = useState(step.resolutionRule);
+  const [quorumCount, setQuorumCount] = useState<string>(step.quorumCount?.toString() ?? '');
   const [allowReturn, setAllowReturn] = useState(step.transitionsFrom.some((t) => t.action === 'Return'));
   const [returnToStepId, setReturnToStepId] = useState<number>(step.transitionsFrom.find((t) => t.action === 'Return')?.toStepId ?? 0);
   const [nextStepId, setNextStepId] = useState<number>(
@@ -82,6 +85,9 @@ export function StepSettingsPanel({ step, design, onSaved }: Props) {
     setEscalateTo(splitRef(step.escalateTo ?? ''));
     setFormDefinitionId(step.formDefinitionId ?? 0);
     setSequentialApproval(step.sequentialApproval);
+    setTaskFanOutMode(step.taskFanOutMode);
+    setResolutionRule(step.resolutionRule);
+    setQuorumCount(step.quorumCount?.toString() ?? '');
     setAllowReturn(step.transitionsFrom.some((t) => t.action === 'Return'));
     setReturnToStepId(step.transitionsFrom.find((t) => t.action === 'Return')?.toStepId ?? 0);
     setNextStepId(step.transitionsFrom.find((t) => t.action === (step.type === 'ActionTask' ? 'Submit' : 'Approve'))?.toStepId ?? 0);
@@ -99,6 +105,15 @@ export function StepSettingsPanel({ step, design, onSaved }: Props) {
   const isCondition = type === 'Condition';
   const otherSteps = design.steps.filter((s) => s.id !== step.id);
   const returnTargetSteps = otherSteps.filter((s) => s.type !== 'Condition');
+
+  // What spawnTasksForStep would actually create — computed client-side from gatekeepers ×
+  // fan-out mode, no API round-trip needed (mock legend C.5: see the effect before publishing).
+  // ClaimFirst fans out the same way PerPerson does (everyone sees it); only OneForStep narrows
+  // to a single recipient.
+  const previewTasks =
+    taskFanOutMode !== 'OneForStep'
+      ? gatekeepers.map((g) => ({ email: design.users.find((u) => u.id === g.userId)?.email, function: g.function }))
+      : gatekeepers.slice(0, 1).map((g) => ({ email: design.users.find((u) => u.id === g.userId)?.email, function: g.function }));
   const actorOptions = actorType === 'Role' ? design.roleOptions : actorType === 'Tag' ? design.tagOptions : design.users.map((u) => u.email);
 
   async function onSubmit(e: React.FormEvent) {
@@ -113,6 +128,9 @@ export function StepSettingsPanel({ step, design, onSaved }: Props) {
       escalateTo: escalateTo.join(',') || null,
       formDefinitionId: formDefinitionId || null,
       sequentialApproval,
+      taskFanOutMode,
+      resolutionRule,
+      quorumCount: resolutionRule === 'Quorum' ? Number(quorumCount) || null : null,
       allowReturn,
       returnToStepId: allowReturn ? returnToStepId || null : null,
       nextStepId: nextStepId || null,
@@ -225,6 +243,69 @@ export function StepSettingsPanel({ step, design, onSaved }: Props) {
               Require gatekeepers to approve in order (sequential)
             </label>
           </div>
+
+          <div className="mt-3">
+            <label className="form-label small">How many tasks to spawn</label>
+            <select
+              className="form-select form-select-sm"
+              value={taskFanOutMode}
+              onChange={(e) => {
+                const mode = e.target.value;
+                setTaskFanOutMode(mode);
+                if (mode === 'ClaimFirst') setResolutionRule('Any');
+              }}
+            >
+              <option value="PerPerson">One task per gatekeeper</option>
+              <option value="OneForStep">One task for the whole step</option>
+              <option value="ClaimFirst">One shared task, first to claim keeps it</option>
+            </select>
+            <div className="form-text">
+              {taskFanOutMode === 'PerPerson'
+                ? `${gatekeepers.length} gatekeeper(s) → ${gatekeepers.length} task(s), each with its own SLA clock.`
+                : taskFanOutMode === 'ClaimFirst'
+                ? 'Every gatekeeper sees it; whoever acts first keeps it and the rest are cancelled.'
+                : 'Only the first-listed gatekeeper gets a task, even if more are assigned.'}
+            </div>
+          </div>
+
+          <div className="mt-3">
+            <label className="form-label small">Step passes when</label>
+            {taskFanOutMode === 'ClaimFirst' ? (
+              <div className="form-text mb-0">Locked to "just one task is approved" — that's what claim-first means.</div>
+            ) : (
+              <>
+                <select className="form-select form-select-sm" value={resolutionRule} onChange={(e) => setResolutionRule(e.target.value)}>
+                  <option value="All">All required tasks are approved</option>
+                  <option value="Any">Just one task is approved</option>
+                  <option value="Quorum">A minimum number are approved</option>
+                </select>
+                {resolutionRule === 'Quorum' && (
+                  <input
+                    type="number"
+                    className="form-control form-control-sm mt-1"
+                    style={{ width: 120 }}
+                    placeholder="Count"
+                    value={quorumCount}
+                    onChange={(e) => setQuorumCount(e.target.value)}
+                  />
+                )}
+              </>
+            )}
+          </div>
+
+          {previewTasks.length > 0 && (
+            <div className="mt-3 border-top pt-2">
+              <div className="text-uppercase text-muted small fw-bold mb-1" style={{ fontSize: 10.5 }}>
+                Preview — tasks this step will create
+              </div>
+              {previewTasks.map((p, i) => (
+                <div key={i} className="small">
+                  <span className="badge text-bg-secondary me-1">{step.orderIndex + 1}</span>
+                  {name || step.name} — {p.function} <span className="text-muted">({p.email})</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

@@ -47,6 +47,9 @@ export interface StepDetail {
   escalateTo: string | null;
   formDefinitionId: number | null;
   sequentialApproval: boolean;
+  taskFanOutMode: string;
+  resolutionRule: string;
+  quorumCount: number | null;
   transitionsFrom: Transition[];
   gatekeepers: Gatekeeper[];
   conditionRulesOf: ConditionRule[];
@@ -103,6 +106,9 @@ export interface SaveStepPayload {
   escalateTo?: string | null;
   formDefinitionId?: number | null;
   sequentialApproval?: boolean;
+  taskFanOutMode?: string;
+  resolutionRule?: string;
+  quorumCount?: number | null;
   allowReturn?: boolean;
   returnToStepId?: number | null;
   nextStepId?: number | null;

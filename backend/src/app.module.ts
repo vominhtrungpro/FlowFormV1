@@ -16,6 +16,7 @@ import { WorkflowsModule } from './workflows/workflows.module';
 import { FormsModule } from './forms/forms.module';
 import { LimsLookupModule } from './lims-lookup/lims-lookup.module';
 import { MasterDataModule } from './master-data/master-data.module';
+import { TasksModule } from './tasks/tasks.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { MasterDataModule } from './master-data/master-data.module';
     FormsModule,
     LimsLookupModule,
     MasterDataModule,
+    TasksModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_GUARD, useClass: JwtAuthGuard }],

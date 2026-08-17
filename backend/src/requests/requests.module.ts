@@ -8,5 +8,6 @@ import { RequestsController } from './requests.controller';
   imports: [WorkflowEngineModule, NotificationsModule],
   providers: [RequestsService],
   controllers: [RequestsController],
+  exports: [RequestsService],
 })
 export class RequestsModule {}

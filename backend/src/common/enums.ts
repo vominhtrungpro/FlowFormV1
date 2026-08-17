@@ -17,6 +17,18 @@ export type SlaUnit = (typeof SlaUnit)[number];
 export const ResolutionRule = ['All', 'Any', 'Quorum'] as const;
 export type ResolutionRule = (typeof ResolutionRule)[number];
 
+// PerPerson is Gate-Review-style fan-out — one Task per resolved actor. ClaimFirst spawns the same
+// per-person fan-out but forces resolutionRule to "Any" (see workflows.service.ts saveStep) — the
+// first person to act closes it and cancelOpenTasksForStep cancels everyone else's, which is
+// exactly "one shared task, whoever claims first keeps it." task-mo-ta-cho-dev.html calls this out
+// as "build the mechanism, not used at baseline" — reusing the Any-resolution/cancel path instead
+// of a separate claim endpoint is the mechanism, with zero new engine surface.
+export const TaskFanOutMode = ['PerPerson', 'OneForStep', 'ClaimFirst'] as const;
+export type TaskFanOutMode = (typeof TaskFanOutMode)[number];
+
+export const TaskStatus = ['Open', 'Approved', 'Rejected', 'Returned', 'Cancelled', 'NotApplicable'] as const;
+export type TaskStatus = (typeof TaskStatus)[number];
+
 export const TransitionAction = ['Submit', 'Approve', 'Return', 'Reject', 'RequestChange', 'Delegate', 'Complete', 'AutoRoute'] as const;
 export type TransitionAction = (typeof TransitionAction)[number];
 

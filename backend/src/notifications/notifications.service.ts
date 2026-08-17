@@ -11,6 +11,7 @@ interface RequestLike {
   title: string;
   code: string;
   metaCreatedBy: number | null;
+  currentStepEnteredAt?: Date | null;
 }
 
 interface StepLike {
@@ -32,35 +33,44 @@ export class NotificationsService {
     private gateway: NotificationsGateway,
   ) {}
 
-  async notifyStepReached(request: RequestLike, step: StepLike) {
-    const recipients = await this.actorResolver.resolveStepRecipients(request.id, step);
-    for (const userId of recipients) {
-      await this.add(userId, request, `"${request.title}" (${request.code}) needs your action at step "${step.name}".`);
-    }
+  // One notification per Task spawned by spawnTasksForStep — this is the sole "you have
+  // something to do" notification now; there's no separate step-level "you were reached" message,
+  // since every step a human can act on spawns a Task and this fires for each one.
+  async notifyTaskAssigned(request: RequestLike, task: { id: number; assigneeId: number }, step: StepLike) {
+    await this.add(task.assigneeId, request, `"${request.title}" (${request.code}) needs your action at step "${step.name}".`, task.id);
   }
 
-  async notifyNextGatekeeper(request: RequestLike, step: StepLike, userId: number) {
-    await this.add(userId, request, `It's your turn to review "${request.title}" (${request.code}) at step "${step.name}".`);
+  async notifyTaskCancelled(request: RequestLike, task: { id: number; assigneeId: number }, step: StepLike, reason: string) {
+    await this.add(
+      task.assigneeId,
+      request,
+      `Your task at step "${step.name}" on "${request.title}" (${request.code}) was cancelled — ${reason}.`,
+      task.id,
+    );
   }
 
   async notifyRequester(request: RequestLike, message: string) {
     if (request.metaCreatedBy != null) await this.add(request.metaCreatedBy, request, message);
   }
 
-  async notifyEscalation(request: RequestLike, step: StepLike) {
+  // Per-task now (was per-request-step) — the SLA job scans individual Tasks, so this fires once
+  // per overdue task rather than once per request, and only escalates (notifies escalateTo), same
+  // as the assumption table: never auto-transfers or reassigns the task itself.
+  async notifyEscalation(request: RequestLike, task: { id: number }, step: StepLike) {
     const recipients = await this.actorResolver.resolveEscalationRecipients(step);
     for (const userId of recipients) {
       await this.add(
         userId,
         request,
         `"${request.title}" (${request.code}) is overdue at step "${step.name}".`,
+        task.id,
       );
     }
   }
 
-  private async add(userId: number, request: RequestLike, message: string) {
+  private async add(userId: number, request: RequestLike, message: string, taskId?: number) {
     const notification = await this.prisma.db.notification.create({
-      data: { userId, requestId: request.id, message },
+      data: { userId, requestId: request.id, taskId, message },
     });
     this.gateway.emitToUser(userId, {
       id: notification.id,
