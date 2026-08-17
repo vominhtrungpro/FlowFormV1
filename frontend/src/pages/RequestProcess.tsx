@@ -178,19 +178,25 @@ export function RequestProcess() {
                         <div className="mb-3">
                           <label className="form-label">Comment</label>
                           <textarea className="form-control" rows={2} value={comment} onChange={(e) => setComment(e.target.value)} />
+                          {request.availableActions.some((a) => a.action === 'Return' || a.action === 'Reject') && (
+                            <div className="form-text">Required for Return / Reject.</div>
+                          )}
                         </div>
                         <div className="d-flex gap-2">
-                          {request.availableActions.map((a) => (
-                            <button
-                              key={a.action}
-                              type="button"
-                              className={`btn ${a.action === 'Reject' ? 'btn-outline-danger' : a.action === 'Return' ? 'btn-outline-secondary' : 'btn-primary'}`}
-                              disabled={submitting}
-                              onClick={() => act(a.action)}
-                            >
-                              {a.action}
-                            </button>
-                          ))}
+                          {request.availableActions.map((a) => {
+                            const needsComment = (a.action === 'Return' || a.action === 'Reject') && !comment.trim();
+                            return (
+                              <button
+                                key={a.action}
+                                type="button"
+                                className={`btn ${a.action === 'Reject' ? 'btn-outline-danger' : a.action === 'Return' ? 'btn-outline-secondary' : 'btn-primary'}`}
+                                disabled={submitting || needsComment}
+                                onClick={() => act(a.action)}
+                              >
+                                {a.action}
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
                     </div>

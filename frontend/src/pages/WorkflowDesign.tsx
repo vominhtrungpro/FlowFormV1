@@ -1,11 +1,19 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { addStep, DesignResponse, getWorkflowDesign, removeStep, reorderSteps, saveWorkflowMeta } from '../api/workflows';
+import { addStep, DesignResponse, getWorkflowDesign, removeStep, reorderSteps, saveWorkflowMeta, StepDetail } from '../api/workflows';
 import { StepSettingsPanel } from '../components/StepSettingsPanel';
 import { useConfirm } from '../components/ConfirmContext';
 import { useToast } from '../components/ToastContext';
 
 const PALETTE = ['ApprovalGate', 'ActionTask', 'Condition', 'SystemCall', 'Notification'];
+
+// So the sidebar node list shows fan-out at a glance (mock legend C.1) without opening each step.
+function taskCountLabel(step: StepDetail): string | null {
+  if (step.type === 'Condition' || step.type === 'SystemCall' || step.type === 'Notification') return null;
+  if (step.type !== 'ApprovalGate') return '1 task';
+  const n = step.taskFanOutMode === 'OneForStep' ? Math.min(1, step.gatekeepers.length) : step.gatekeepers.length;
+  return `${n} task${n === 1 ? '' : 's'}`;
+}
 
 export function WorkflowDesign() {
   const { id } = useParams();
@@ -206,6 +214,7 @@ export function WorkflowDesign() {
                 <span className="nn">{i + 1}</span>
                 <span className="nt">{s.name}</span>
                 <span className="ms-auto badge text-bg-secondary">{s.type}</span>
+                {taskCountLabel(s) && <span className="badge text-bg-light text-dark border">{taskCountLabel(s)}</span>}
                 <button type="button" className="row-remove" title="Remove step" onClick={(e) => onRemoveStep(s.id, e)}>
                   ✕
                 </button>

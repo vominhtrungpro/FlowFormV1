@@ -165,19 +165,25 @@ export function TaskDetail() {
                 <div className="mb-3">
                   <label className="form-label">Comment</label>
                   <textarea className="form-control" rows={2} value={comment} onChange={(e) => setComment(e.target.value)} />
+                  {(task.availableActions.some((a) => a.action === 'Return' || a.action === 'Reject')) && (
+                    <div className="form-text">Required for Return / Reject.</div>
+                  )}
                 </div>
                 <div className="d-flex flex-column gap-2">
-                  {task.availableActions.map((a) => (
-                    <button
-                      key={a.action}
-                      type="button"
-                      className={`btn ${a.action === 'Reject' ? 'btn-outline-danger' : a.action === 'Return' ? 'btn-outline-secondary' : 'btn-primary'}`}
-                      disabled={submitting || (a.action === 'Approve' && blockingConditions.length > 0)}
-                      onClick={() => act(a.action)}
-                    >
-                      {a.action}
-                    </button>
-                  ))}
+                  {task.availableActions.map((a) => {
+                    const needsComment = (a.action === 'Return' || a.action === 'Reject') && !comment.trim();
+                    return (
+                      <button
+                        key={a.action}
+                        type="button"
+                        className={`btn ${a.action === 'Reject' ? 'btn-outline-danger' : a.action === 'Return' ? 'btn-outline-secondary' : 'btn-primary'}`}
+                        disabled={submitting || needsComment || (a.action === 'Approve' && blockingConditions.length > 0)}
+                        onClick={() => act(a.action)}
+                      >
+                        {a.action}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -213,6 +219,10 @@ export function TaskDetail() {
                   Assigned via
                 </dt>
                 <dd className="col-7">{task.reason}</dd>
+                <dt className="col-5 text-muted text-uppercase" style={{ fontSize: 11 }}>
+                  Delegate allowed
+                </dt>
+                <dd className="col-7">{task.canDelegate ? 'Yes — same team' : 'No'}</dd>
                 {task.slaValue != null && (
                   <>
                     <dt className="col-5 text-muted text-uppercase" style={{ fontSize: 11 }}>

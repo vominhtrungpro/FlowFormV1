@@ -420,6 +420,14 @@ export class RequestsService {
     const admin = this.isAdmin(user);
     const stepId = request.currentStepId;
 
+    // Return/Reject require a comment (task-mo-ta-cho-dev.html screen B legend: "Trả về và huỷ
+    // luôn bắt buộc có nhận xét") — whoever gets sent back or terminated needs to know why, not
+    // just that it happened. Applies to admin too; this is a record-quality rule, not a permission
+    // gate the admin bypass is meant to skip.
+    if ((action === 'Return' || action === 'Reject') && !trimmedComment) {
+      throw new BadRequestException(`A comment is required to ${action.toLowerCase()} this request.`);
+    }
+
     // Every permission check here is server-side (rule 5) — a hidden/disabled button client-side
     // is convenience only. Admin bypasses task bookkeeping entirely and forces the transition
     // directly, same as before this rewrite: their action was never gated on holding a vote.
@@ -473,12 +481,18 @@ export class RequestsService {
     const openRequiredCount = required.filter((t) => t.status === 'Open').length;
 
     const resolutionRule = request.currentStep!.resolutionRule;
+    // Sequential mode only ever has one Open required task at a time (the next person's task is
+    // spawned progressively, not all upfront) — so "no required task is currently Open" is true
+    // after every single approval, not just the last one. 'All' is only really satisfied once
+    // nobody's left in the roster to hand the next task to.
+    const rosterExhausted = async () =>
+      (await this.actorResolver.resolveStepRecipients(id, request.currentStep!, sinceEnteredAt)).length === 0;
     const satisfied =
       resolutionRule === 'Any'
         ? approvedCount >= 1
         : resolutionRule === 'Quorum'
         ? approvedCount >= (request.currentStep!.quorumCount ?? required.length)
-        : openRequiredCount === 0; // 'All' (default)
+        : openRequiredCount === 0 && (!request.currentStep!.sequentialApproval || (await rosterExhausted())); // 'All' (default)
 
     if (satisfied) {
       await this.engine.execute(id, action, actorId, trimmedComment);
@@ -489,8 +503,11 @@ export class RequestsService {
       await this.engine.spawnNextSequentialTask(id, stepId);
     }
 
+    const totalRequired = request.currentStep!.sequentialApproval
+      ? request.currentStep!.gatekeepers.filter((g) => g.userId !== request.metaCreatedBy).length
+      : required.length;
     return {
-      notice: `Your ${action.toLowerCase()} was recorded (${approvedCount}/${required.length} required so far) — waiting on the others before this moves forward.`,
+      notice: `Your ${action.toLowerCase()} was recorded (${approvedCount}/${totalRequired} required so far) — waiting on the others before this moves forward.`,
     };
   }
 
