@@ -147,6 +147,7 @@ export function TaskDetail() {
                   values={values}
                   onChange={(fieldId, v) => setValues((prev) => ({ ...prev, [String(fieldId)]: v }))}
                   disabled={!task.canAct}
+                  requestId={task.requestId}
                 />
               </div>
             </div>

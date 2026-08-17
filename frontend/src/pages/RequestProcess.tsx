@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { actOnRequest, getRequest, RequestDetail } from '../api/requests';
 import { FieldGroup } from '../components/FieldGroup';
 import { GateRail } from '../components/GateRail';
+import { GatekeeperApprovalsTable } from '../components/GatekeeperApprovalsTable';
 
 const statusClass: Record<string, string> = {
   Completed: 'text-bg-success',
@@ -103,15 +104,23 @@ export function RequestProcess() {
             if (activeTab !== `step-${s.id}`) return null;
 
             if (s.orderIndex < request.currentIndex) {
+              const pastLabel = s.type === 'ApprovalGate' ? 'approved' : 'submitted';
               return (
-                <div className="card" key={s.id}>
-                  <div className="card-header">{s.name} · submitted</div>
-                  <div className="card-body">
-                    {s.formFields.length > 0 ? (
-                      <FieldGroup fields={s.formFields} values={values} onChange={() => {}} disabled />
-                    ) : (
-                      <p className="text-muted small mb-0">No form on this step — nothing was submitted here.</p>
-                    )}
+                <div key={s.id}>
+                  {s.gatekeeperApprovals && s.gatekeeperApprovals.length > 0 && (
+                    <GatekeeperApprovalsTable approvals={s.gatekeeperApprovals} formFields={s.formFields} />
+                  )}
+                  <div className="card">
+                    <div className="card-header">
+                      {s.name} · {pastLabel}
+                    </div>
+                    <div className="card-body">
+                      {s.formFields.length > 0 ? (
+                        <FieldGroup fields={s.formFields} values={values} onChange={() => {}} disabled />
+                      ) : (
+                        <p className="text-muted small mb-0">No form on this step — nothing was submitted here.</p>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
@@ -121,34 +130,11 @@ export function RequestProcess() {
               return (
                 <div key={s.id}>
                   {request.gatekeeperApprovals && request.gatekeeperApprovals.length > 0 && (
-                    <div className="card mb-3">
-                      <div className="card-header">Gatekeeper approvals</div>
-                      <table className="table table-sm mb-0">
-                        <thead>
-                          <tr>
-                            <th>Function</th>
-                            <th>Approver</th>
-                            <th>Decision</th>
-                            <th>Comment</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {request.gatekeeperApprovals.map((g, i) => (
-                            <tr key={i}>
-                              <td>{g.function}</td>
-                              <td className="small">{g.email}</td>
-                              <td>
-                                <span className={`badge ${g.approved ? 'text-bg-success' : 'text-bg-secondary'}`}>
-                                  {g.approved ? 'Approved' : 'Pending'}
-                                </span>
-                              </td>
-                              <td className="small text-muted">{g.comment}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                      <p className="hint p-2 mb-0">Every gatekeeper listed here must Approve before this step moves on; any single Reject sends it back immediately.</p>
-                    </div>
+                    <GatekeeperApprovalsTable
+                      approvals={request.gatekeeperApprovals}
+                      formFields={s.formFields}
+                      hint="Every gatekeeper listed here must Approve before this step moves on; any single Reject sends it back immediately."
+                    />
                   )}
 
                   {!isOpen ? null : !request.canAct ? (

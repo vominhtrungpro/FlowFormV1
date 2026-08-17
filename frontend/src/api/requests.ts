@@ -73,6 +73,16 @@ export async function createRequest(requestTypeId: number, fieldValues: Record<s
   return data as { id: number };
 }
 
+export interface GatekeeperApproval {
+  taskId: number;
+  email: string;
+  function: string;
+  approved: boolean;
+  approvedAt: string | null;
+  comment: string | null;
+  fieldValues: Record<number, string>;
+}
+
 export interface RequestDetail {
   id: number;
   code: string;
@@ -87,13 +97,21 @@ export interface RequestDetail {
     formDefinition?: { fields: FieldDto[] } | null;
     gatekeepers: Array<{ id: number; userId: number }>;
   } | null;
-  steps: Array<{ id: number; name: string; type: string; orderIndex: number; actorSummary: string; formFields: FieldDto[] }>;
+  steps: Array<{
+    id: number;
+    name: string;
+    type: string;
+    orderIndex: number;
+    actorSummary: string;
+    formFields: FieldDto[];
+    gatekeeperApprovals?: GatekeeperApproval[];
+  }>;
   personnel: Array<{ name: string; role: string }>;
   currentIndex: number;
   availableActions: Array<{ action: string; toStepId: number | null }>;
   canAct: boolean;
   fieldValues: Record<number, string>;
-  gatekeeperApprovals?: Array<{ email: string; function: string; approved: boolean; approvedAt: string | null; comment: string | null }>;
+  gatekeeperApprovals?: GatekeeperApproval[];
   alreadyVotedWaiting?: boolean;
   notYourTurn?: boolean;
   waitingOnEmail?: string;

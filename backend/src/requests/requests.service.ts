@@ -292,33 +292,79 @@ export class RequestsService {
     let notYourTurn = false;
     let waitingOnEmail: string | undefined;
 
-    const activeGatekeepers = request.currentStep?.gatekeepers ?? [];
-    if (request.currentStep?.type === 'ApprovalGate' && activeGatekeepers.length > 1 && request.currentStepId != null) {
-      // Scoped to *this visit* — a Task from a prior Return-then-resubmit cycle to this same step
-      // doesn't count (task-mo-ta-cho-dev.html rule 3: "chữ ký vòng trước không còn giá trị").
-      const sinceEnteredAt = request.currentStepEnteredAt ?? request.metaCreatedAt;
+    const allUsersForTasks = await this.prisma.db.user.findMany();
+    const usersByIdForTasks = new Map(allUsersForTasks.map((u) => [u.id, u]));
+
+    // Attach a per-step gatekeeper-approvals table to every ApprovalGate step with more than one
+    // gatekeeper — not just the current one — so switching to an already-passed step's tab still
+    // shows who approved it and what they noted, instead of only ever showing the live step.
+    for (const s of steps as any[]) {
+      if (s.type !== 'ApprovalGate' || (s.gatekeepers?.length ?? 0) <= 1) continue;
+
+      // Scoped to that step's *most recent* visit — a Task from a prior Return-then-resubmit
+      // cycle to this same step doesn't count (task-mo-ta-cho-dev.html rule 3: "chữ ký vòng trước
+      // không còn giá trị"). The current step's own currentStepEnteredAt is authoritative when
+      // this is the live step; for a past step, the latest history row that landed on it is.
+      let enteredAt: Date;
+      if (s.id === request.currentStepId) {
+        enteredAt = request.currentStepEnteredAt ?? request.metaCreatedAt;
+      } else {
+        // NOT { fromStepId: s.id } excludes a not-yet-satisfied vote's own history row (which
+        // also has toStepId === s.id, since the request stayed put) — only a row that actually
+        // transitioned the request onto this step from somewhere else counts as "entering" it.
+        const lastEntry = await this.prisma.db.requestHistory.findFirst({
+          where: { requestId: id, toStepId: s.id, NOT: { fromStepId: s.id } },
+          orderBy: { metaCreatedAt: 'desc' },
+        });
+        enteredAt = lastEntry?.metaCreatedAt ?? request.metaCreatedAt;
+      }
+
       const tasks = await this.prisma.db.task.findMany({
-        where: { requestId: id, stepId: request.currentStepId, metaCreatedAt: { gte: sinceEnteredAt } },
+        where: { requestId: id, stepId: s.id, metaCreatedAt: { gte: enteredAt } },
         orderBy: { id: 'asc' },
       });
-      const users = await this.prisma.db.user.findMany();
-      const usersById = new Map(users.map((u) => [u.id, u]));
 
-      gatekeeperApprovals = tasks.map((t) => ({
-        email: usersById.get(t.assigneeId)?.email,
+      // So "click this gatekeeper's name" can show exactly the form they personally answered —
+      // a shared (taskId: null) value is the fallback, but a task-scoped one (PerPerson) wins,
+      // same precedence tasks.service.ts's own getDetail uses for a task's own form.
+      const stepFieldIds = (s.formFields ?? []).map((f: { id: number }) => f.id);
+      const sharedFieldValues: Record<number, string> = {};
+      const fieldValuesByTaskId = new Map<number, Record<number, string>>();
+      if (stepFieldIds.length > 0) {
+        const fieldValueRowsForStep = await this.prisma.db.requestFieldValue.findMany({
+          where: { requestId: id, fieldId: { in: stepFieldIds } },
+        });
+        for (const fv of fieldValueRowsForStep) {
+          if (fv.taskId == null) {
+            sharedFieldValues[fv.fieldId] = fv.value;
+          } else {
+            if (!fieldValuesByTaskId.has(fv.taskId)) fieldValuesByTaskId.set(fv.taskId, {});
+            fieldValuesByTaskId.get(fv.taskId)![fv.fieldId] = fv.value;
+          }
+        }
+      }
+
+      const approvals = tasks.map((t) => ({
+        taskId: t.id,
+        email: usersByIdForTasks.get(t.assigneeId)?.email,
         function: t.function ?? '—',
         approved: t.status === 'Approved',
         approvedAt: t.status !== 'Open' ? t.metaUpdatedAt : null,
         comment: t.comment,
+        fieldValues: { ...sharedFieldValues, ...(fieldValuesByTaskId.get(t.id) ?? {}) },
       }));
+      s.gatekeeperApprovals = approvals;
 
-      const myTask = tasks.find((t) => t.assigneeId === user.userId);
-      alreadyVotedWaiting = !this.isAdmin(user) && !!myTask && myTask.status !== 'Open';
+      if (s.id === request.currentStepId) {
+        gatekeeperApprovals = approvals;
+        const myTask = tasks.find((t) => t.assigneeId === user.userId);
+        alreadyVotedWaiting = !this.isAdmin(user) && !!myTask && myTask.status !== 'Open';
 
-      if (request.currentStep.sequentialApproval) {
-        const openTask = tasks.find((t) => t.status === 'Open');
-        notYourTurn = !this.isAdmin(user) && activeGatekeepers.some((g) => g.userId === user.userId) && openTask?.assigneeId !== user.userId;
-        waitingOnEmail = openTask ? usersById.get(openTask.assigneeId)?.email : undefined;
+        if (request.currentStep!.sequentialApproval) {
+          const openTask = tasks.find((t) => t.status === 'Open');
+          notYourTurn = !this.isAdmin(user) && s.gatekeepers.some((g: { userId: number }) => g.userId === user.userId) && openTask?.assigneeId !== user.userId;
+          waitingOnEmail = openTask ? usersByIdForTasks.get(openTask.assigneeId)?.email : undefined;
+        }
       }
     }
 
@@ -498,6 +544,15 @@ export class RequestsService {
       await this.engine.execute(id, action, actorId, trimmedComment);
       return { ok: true };
     }
+
+    // Not (yet) satisfied — the request stays on this step, so engine.execute() (and its own
+    // requestHistory row) never runs for this vote. Without a row of its own here, this person's
+    // Approve would be invisible in the History tab forever — only whoever happens to cast the
+    // *last, satisfying* vote would ever show up there. fromStepId/toStepId both point at the
+    // current step since nothing actually transitioned.
+    await this.prisma.db.requestHistory.create({
+      data: { requestId: id, stepId, action, actorId, fromStepId: stepId, toStepId: stepId, comment: trimmedComment },
+    });
 
     if (request.currentStep!.sequentialApproval) {
       await this.engine.spawnNextSequentialTask(id, stepId);
